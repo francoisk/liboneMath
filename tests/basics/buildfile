@@ -1,0 +1,3 @@
+import libs = liboneMath%lib{oneMath}
+
+exe{driver}: {hxx ixx txx cxx}{**} $libs testscript{**}
