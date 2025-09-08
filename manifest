@@ -1,6 +1,7 @@
 : 1
 name: liboneMath
-version: 0.1.0-a.0.z
+version: 0.8.0-a.0.z
+upstream-version: 0.8
 language: c++
 summary: oneMath C++ library
 license: Apache-2.0 ; Apache License 2.0.
