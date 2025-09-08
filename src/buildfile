@@ -10,11 +10,11 @@ include $pub
 
 pub_hdrs = $($pub/ pub_hdrs)
 
-lib{oneMath}: $pub/{$pub_hdrs}
+lib{onemath}: $pub/{$pub_hdrs}
 
 # Private headers and sources as well as dependencies.
 #
-lib{oneMath}: {hxx ixx txx cxx}{**} $impl_libs $intf_libs
+lib{onemath}: {hxx ixx txx cxx}{**} $impl_libs $intf_libs
 
 # Build options.
 #
@@ -31,23 +31,23 @@ cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src" \
 
 # Export options.
 #
-lib{oneMath}:
+lib{onemath}:
 {
   cxx.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"
   cxx.export.libs = $intf_libs
 }
 
-#liba{oneMath}: cxx.export.poptions += -DONEAPI_STATIC
-#libs{oneMath}: cxx.export.poptions += -DONEAPI_SHARED
+#liba{onemath}: cxx.export.poptions += -DONEAPI_STATIC
+#libs{onemath}: cxx.export.poptions += -DONEAPI_SHARED
 
 # For pre-releases use the complete version to make sure they cannot
 # be used in place of another pre-release or the final version. See
 # the version module for details on the version.* variable values.
 #
 if $version.pre_release
-  lib{oneMath}: bin.lib.version = "-$version.project_id"
+  lib{onemath}: bin.lib.version = "-$version.project_id"
 else
-  lib{oneMath}: bin.lib.version = "-$version.major.$version.minor"
+  lib{onemath}: bin.lib.version = "-$version.major.$version.minor"
 
 # Don't install private headers.
 #
