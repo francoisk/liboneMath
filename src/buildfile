@@ -2,6 +2,8 @@ intf_libs = # Interface dependencies.
 impl_libs = # Implementation dependencies.
 #import xxxx_libs += libhello%lib{hello}
 
+using autoconf
+
 # Public headers.
 #
 pub = [dir_path] ../include/oneapi/
@@ -10,11 +12,70 @@ include $pub
 
 pub_hdrs = $($pub/ pub_hdrs)
 
-lib{onemath}: $pub/{$pub_hdrs}
+supported_backends = mklcpu \
+                     mklgpu
+
+# Fail if no supported backends are enabled.
+#
+backends = [null]
+
+if ($build.mode != 'skeleton')
+{
+  for b: $supported_backends
+  {
+    if $(config.liboneMath.enable_$(b)_backend)
+      backends += $b
+  }
+
+  ifn $backends
+    fail "no supported backends enabled"
+  else
+    info "enabled backends:" $backends
+}
+
+# Public headers.
+#
+lib{onemath}: $pub/{$pub_hdrs} hxx{config}
 
 # Private headers and sources as well as dependencies.
 #
-lib{onemath}: {hxx ixx txx cxx}{**} $impl_libs $intf_libs
+# lib{onemath}: {hxx ixx txx cxx}{**} $impl_libs $intf_libs
+
+# Generate config.hpp.
+#
+hxx{config}: in{config}
+{
+  autoconf.flavor = cmake
+
+  ONEMATH_ENABLE_ARMPL_BACKEND = $config.liboneMath.enable_armpl_backend
+  ONEMATH_ENABLE_ARMPL_OPENRNG = false
+  ONEMATH_ENABLE_CUBLAS_BACKEND = $config.liboneMath.enable_cublas_backend
+  ONEMATH_ENABLE_CUFFT_BACKEND = $config.liboneMath.enable_cufft_backend
+  ONEMATH_ENABLE_CURAND_BACKEND = $config.liboneMath.enable_curand_backend
+  ONEMATH_ENABLE_CUSOLVER_BACKEND = $config.liboneMath.enable_cusolver_backend
+  ONEMATH_ENABLE_CUSPARSE_BACKEND = $config.liboneMath.enable_cusparse_backend
+  ONEMATH_ENABLE_MKLCPU_BACKEND = $config.liboneMath.enable_mklcpu_backend
+  ONEMATH_ENABLE_MKLGPU_BACKEND = $config.liboneMath.enable_mklgpu_backend
+  ONEMATH_ENABLE_NETLIB_BACKEND = $config.liboneMath.enable_netlib_backend
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND = $config.liboneMath.enable_generic_blas_backend
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_AMD_GPU = false
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_INTEL_CPU = false
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_INTEL_GPU = false
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_NVIDIA_GPU = false
+  ONEMATH_GENERIC_BLAS_ENABLE_COMPLEX = false
+  ONEMATH_GENERIC_BLAS_ENABLE_USM = false
+  ONEMATH_ENABLE_PORTFFT_BACKEND = $config.liboneMath.enable_portfft_backend
+  ONEMATH_ENABLE_ROCBLAS_BACKEND = $config.liboneMath.enable_rocblas_backend
+  ONEMATH_ENABLE_ROCFFT_BACKEND = $config.liboneMath.enable_rocfft_backend
+  ONEMATH_ENABLE_ROCRAND_BACKEND = $config.liboneMath.enable_rocrand_backend
+  ONEMATH_ENABLE_ROCSOLVER_BACKEND = $config.liboneMath.enable_rocsolver_backend
+  ONEMATH_ENABLE_ROCSPARSE_BACKEND = $config.liboneMath.enable_rocsparse_backend
+
+  # @@ TODO This controls only dllimport/export so not sure why it's defined
+  #    in a header.
+  #
+  ONEMATH_BUILD_SHARED_LIBS = true
+}
 
 # Build options.
 #
