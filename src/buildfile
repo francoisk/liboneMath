@@ -35,15 +35,20 @@ if ($build.mode != 'skeleton')
 
 # Public headers.
 #
-lib{onemath}: $pub/{$pub_hdrs} hxx{config}
+lib{onemath}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
 
 # Private headers and sources as well as dependencies.
 #
-# lib{onemath}: {hxx ixx txx cxx}{**} $impl_libs $intf_libs
+lib{onemath}: blas/cxx{blas_loader}             \
+              lapack/cxx{lapack_loader}         \
+              rng/cxx{rng_loader}               \
+              dft/backends/cxx{descriptor}      \
+              dft/cxx{dft_loader}               \
+              sparse_blas/cxx{sparse_blas_loader}
 
 # Generate config.hpp.
 #
-hxx{config}: in{config}
+oneapi/math/detail/hxx{config}: in{config}
 {
   autoconf.flavor = cmake
 
@@ -84,11 +89,14 @@ src_pfx_inc = [dir_path] $src_root/include/
 out_pfx_src = [dir_path] $out_root/src/
 src_pfx_src = [dir_path] $src_root/src/
 
-cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src" \
-                "-I$out_pfx_inc" "-I$src_pfx_inc"
+cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src"       \
+                "-I$out_pfx_inc" "-I$src_pfx_inc"       \
+                "-I$src_pfx_src/include/"
 
 #obja{*}: cxx.poptions += -DONEAPI_STATIC_BUILD
 #objs{*}: cxx.poptions += -DONEAPI_SHARED_BUILD
+
+cxx.coptions += -fsycl
 
 # Export options.
 #
