@@ -98,6 +98,24 @@ cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src"       \
 
 cxx.coptions += -fsycl
 
+# Work around bugs in icpx (see README-DEV for details).
+#
+# - Don't pass `-fsycl` during header extraction because its combination with
+#   `-E` causes icpx to break in a couple of ways.
+#
+# - Ask build2 not to use foo.ii as the input to compilation, but to use the
+#   original foo.cpp instead.
+
+# Need to add this path manually because we don't pass -fsycl during header
+# extraction. @@ TODO Make this path configurable.
+#
+obj{*}: cxx.poptions += "-isystem/opt/intel/oneapi/compiler/2025.2/include/"
+
+# Use the original source file instead of the .ii as input to compilation (see
+# above).
+#
+obj{*}: cc.reprocess = true
+
 # Export options.
 #
 lib{onemath}:
