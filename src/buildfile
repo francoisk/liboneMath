@@ -39,12 +39,13 @@ lib{onemath}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
 
 # Private headers and sources as well as dependencies.
 #
-lib{onemath}: blas/cxx{blas_loader}             \
-              lapack/cxx{lapack_loader}         \
-              rng/cxx{rng_loader}               \
-              dft/backends/cxx{descriptor}      \
-              dft/cxx{dft_loader}               \
-              sparse_blas/cxx{sparse_blas_loader}
+lib{onemath}: blas/cxx{blas_loader}
+
+              # lapack/cxx{lapack_loader}
+              # rng/cxx{rng_loader}               \
+              # dft/backends/cxx{descriptor}      \
+              # dft/cxx{dft_loader}               \
+              # sparse_blas/cxx{sparse_blas_loader}
 
 # Generate config.hpp.
 #
