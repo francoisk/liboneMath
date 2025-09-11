@@ -2,6 +2,8 @@ intf_libs = # Interface dependencies.
 impl_libs = # Implementation dependencies.
 #import xxxx_libs += libhello%lib{hello}
 
+import! clang_offload_packager = icpx%exe{clang-offload-packager}
+
 using autoconf
 
 # Public headers.
@@ -35,17 +37,7 @@ if ($build.mode != 'skeleton')
 
 # Public headers.
 #
-lib{onemath}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
-
-# Private headers and sources as well as dependencies.
-#
-lib{onemath}: blas/cxx{blas_loader}
-
-              # lapack/cxx{lapack_loader}
-              # rng/cxx{rng_loader}               \
-              # dft/backends/cxx{descriptor}      \
-              # dft/cxx{dft_loader}               \
-              # sparse_blas/cxx{sparse_blas_loader}
+./: lib{onemath}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
 
 # Generate config.hpp.
 #
@@ -83,6 +75,91 @@ oneapi/math/detail/hxx{config}: in{config}
   ONEMATH_BUILD_SHARED_LIBS = true
 }
 
+# Private headers and sources as well as dependencies.
+#
+# The desired compilation commands for a source file foo.cpp is as follows:
+#
+#   Extract dependencies and compile the device object from foo.cpp. Then
+#   convert it into an offload binary (an object that can be embedded inside
+#   the host object).
+#
+#     icpx -fsycl --offload-new-driver -fsycl-device-only
+#          -MD -E -o foo_device.ii foo.cpp
+#     icpx -fsycl --offload-new-driver -fsycl-device-only
+#          -c foo_device.ii -o foo_device.o
+#     clang-offload-packager -o foo_device_offload.o
+#                            --image=file=foo_device.o,triple=spir64-unknown-unknown
+#
+#   Extract dependencies and compile the host object, also from foo.cpp. Then
+#   embed the device offload binary inside the host object's offload section.
+#
+#     icpx -fsycl --offload-new-driver -fsycl-host-only
+#          -MD -E -o foo_host.ii foo.cpp
+#     icpx -fsycl --offload-new-driver -fsycl-host-only
+#          -Xclang -fembed-offload-object=foo_device_offload.so.o
+#          -o foo_host.o -c foo_host.ii
+#
+#   Link the library using the various host objects with the device code
+#   embedded in them as input.
+#
+#     icpx -shared -o libonemath.so foo_host.o bar_host.o baz_host.o
+#
+# This sequence can be verified by compiling the device and host objects in a
+# single compiler invocation (the default method of operation) with debug
+# output enabled (-###):
+#
+#   icpx -### -fsycl --offload-new-driver -o foo.o foo.cpp
+#
+libs{onemath}: blas/objs{blas_loader_host.so.o}
+liba{onemath}: blas/obja{blas_loader_host.a.o}
+
+              # lapack/cxx{lapack_loader}
+              # rng/cxx{rng_loader}               \
+              # dft/backends/cxx{descriptor}      \
+              # dft/cxx{dft_loader}               \
+              # sparse_blas/cxx{sparse_blas_loader}
+
+# Host object
+#
+blas/objs{blas_loader_host.so.o}: blas/cxx{blas_loader}
+blas/objs{blas_loader_host.so.o}: blas/objs{blas_loader_device_offload.so.o}: \
+  include = adhoc
+
+blas/obja{blas_loader_host.a.o}:  blas/cxx{blas_loader}
+blas/obja{blas_loader_host.a.o}:  blas/obja{blas_loader_device_offload.a.o}: \
+  include = adhoc
+
+# Device object
+#
+blas/objs{blas_loader_device.so.o}: blas/cxx{blas_loader}
+blas/obja{blas_loader_device.a.o}:  blas/cxx{blas_loader}
+
+# Device offload object
+#
+blas/objs{blas_loader_device_offload.so.o}: blas/objs{blas_loader_device.so.o}
+blas/obja{blas_loader_device_offload.a.o}:  blas/obja{blas_loader_device.a.o}
+
+# Generate the device offload object using the clang-offload-packager tool.
+#
+# spir64-unknown-unknown: From the `icpx -### -fsycl -fsycl-device-only
+#                         foo.cpp` output.
+#
+objs{~'/(.*)_offload.so/'}: objs{~'/\1.so/'}
+{{
+  diag clang-offload-packager $path($<[0]) -> $path($>[0])
+
+  $clang_offload_packager \
+  -o $path($>[0]) --image=file="$path($<[0])",triple=spir64-unknown-unknown
+}}
+
+obja{~'/(.*)_offload.a/'}: obja{~'/\1.a/'}
+{{
+  diag clang-offload-packager $path($<[0]) -> $path($>[0])
+
+  $clang_offload_packager \
+  -o $path($>[0]) --image=file="$path($<[0])",triple=spir64-unknown-unknown
+}}
+
 # Build options.
 #
 out_pfx_inc = [dir_path] $out_root/include/
@@ -94,28 +171,36 @@ cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src"       \
                 "-I$out_pfx_inc" "-I$src_pfx_inc"       \
                 "-I$src_pfx_src/include/"
 
-#obja{*}: cxx.poptions += -DONEAPI_STATIC_BUILD
-#objs{*}: cxx.poptions += -DONEAPI_SHARED_BUILD
-
-cxx.coptions += -fsycl
-
-# Work around bugs in icpx (see README-DEV for details).
-#
-# - Don't pass `-fsycl` during header extraction because its combination with
-#   `-E` causes icpx to break in a couple of ways.
-#
-# - Ask build2 not to use foo.ii as the input to compilation, but to use the
-#   original foo.cpp instead.
-
 # Need to add this path manually because we don't pass -fsycl during header
 # extraction. @@ TODO Make this path configurable.
 #
-obj{*}: cxx.poptions += "-isystem/opt/intel/oneapi/compiler/2025.2/include/"
+cxx.poptions += "-isystem/opt/intel/oneapi/compiler/2025.2/include/"
 
-# Use the original source file instead of the .ii as input to compilation (see
-# above).
+#obja{*}: cxx.poptions += -DONEAPI_STATIC_BUILD
+#objs{*}: cxx.poptions += -DONEAPI_SHARED_BUILD
+
+objs{*}: cxx.coptions += -fsycl --offload-new-driver
+obja{*}: cxx.coptions += -fsycl --offload-new-driver
+
+# Build options for the host object:
 #
-obj{*}: cc.reprocess = true
+# - Compile for host only
+# - Embed the device offload object inside the host object
+#
+blas/objs{blas_loader_host.so.o}: cxx.coptions +=       \
+  -fsycl-host-only                                      \
+  -Xclang -fembed-offload-object="$out_base/blas/blas_loader_device_offload.so.o"
+
+blas/obja{blas_loader_host.a.o}: cxx.coptions +=        \
+  -fsycl-host-only                                      \
+  -Xclang -fembed-offload-object="$out_base/blas/blas_loader_device_offload.a.o"
+
+# Build options for the device object:
+#
+# - Compile for the device only
+#
+blas/objs{blas_loader_device.so.o}: cxx.coptions += -fsycl-device-only
+blas/obja{blas_loader_device.a.o}:  cxx.coptions += -fsycl-device-only
 
 # Export options.
 #
