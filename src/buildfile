@@ -35,9 +35,13 @@ if ($build.mode != 'skeleton')
     info "enabled backends:" $backends
 }
 
+all_libs = onemath \
+           onemath_blas_mklcpu
+
 # Public headers.
 #
 ./: lib{onemath}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
+./: lib{onemath_blas_mklcpu}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
 
 # Generate config.hpp.
 #
@@ -112,18 +116,34 @@ oneapi/math/detail/hxx{config}: in{config}
 #
 
 onemath_src = blas/blas_loader          \
-	      dft/backends/descriptor   \
-	      dft/dft_loader            \
-	      lapack/lapack_loader      \
-	      rng/rng_loader            \
-	      sparse_blas/sparse_blas_loader
+              dft/backends/descriptor   \
+              dft/dft_loader            \
+              lapack/lapack_loader      \
+              rng/rng_loader            \
+              sparse_blas/sparse_blas_loader
 
-all_src = $onemath_src
+blas_mklcpu_src = blas/backends/mklcpu/mklcpu_batch             \
+                  blas/backends/mklcpu/mklcpu_extensions        \
+                  blas/backends/mklcpu/mklcpu_level1            \
+                  blas/backends/mklcpu/mklcpu_level2            \
+                  blas/backends/mklcpu/mklcpu_level3            \
+                  blas/backends/mklcpu/mklcpu_wrappers
 
+all_src = $onemath_src \
+          $blas_mklcpu_src
+
+# @@ TODO Private headers
+#
 for n: $onemath_src
 {
   libs{onemath}: objs{$(n)_host.so.o}
   liba{onemath}: obja{$(n)_host.a.o}
+}
+
+for n: $blas_mklcpu_src
+{
+  libs{onemath_blas_mklcpu}: objs{$(n)_host.so.o}
+  liba{onemath_blas_mklcpu}: obja{$(n)_host.a.o}
 }
 
 for n: $all_src
@@ -182,6 +202,18 @@ cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src"       \
 #
 cxx.poptions += "-I$src_pfx_src/include/"
 
+# @@ TODO Probably necessary all backends.
+#
+blas/backends/
+{
+  # <mkl/blas.hpp>
+  #
+  # MKL_ILP64: Define if using the MKL ILP64 (64-bit) libraries.
+  #
+  cxx.poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi" \
+                  -DMKL_ILP64
+}
+
 if ($cxx.target.class == 'windows')
   objs{*}: cxx.poptions += -Donemath_EXPORTS
 
@@ -221,15 +253,70 @@ for n: $all_src
   obja{$(n)_device.a.o}:  cxx.coptions += -fsycl-device-only
 }
 
+# Libraries
+
+# Note: On my Linux dev machine the MKL setvars script sets the following
+# LD_LIBRARY_PATH:
+#
+# /opt/intel/oneapi/tcm/1.4/lib:
+# /opt/intel/oneapi/umf/0.11/lib:
+# /opt/intel/oneapi/tbb/2022.2/env/../lib/intel64/gcc4.8:
+# /opt/intel/oneapi/mkl/2025.2/lib:
+# /opt/intel/oneapi/compiler/2025.2/lib
+#
+
 if ($cxx.target.class == 'windows')
 {
   if ($cxx.target.system == 'mingw32')
-    lib{onemath}: cxx.libs += -lsycl
+    lib{$all_libs}: cxx.libs += -lsycl
   else
-    lib{onemath}: cxx.libs += sycl.lib
+    lib{$all_libs}: cxx.libs += sycl.lib
 }
 else
-  lib{onemath}: cxx.libs += -lsycl
+  lib{$all_libs}: cxx.libs += -lsycl
+
+if ($cxx.target.class == 'windows')
+{
+  if ($cxx.target.system == 'mingw32')
+  {
+    lib{onemath_blas_mklcpu}:
+    {
+      # cxx.loptions += -L/opt/intel/oneapi/mkl/2025.2/lib \
+      #                 -L/opt/intel/oneapi/compiler/2025.2/lib
+
+      cxx.libs += -lmkl_sycl_blas       \
+                  -lmkl_intel_ilp64     \
+                  -lmkl_tbb_thread      \
+                  -lmkl_core            \
+                  -ltbb                 \
+                  -lOpenCL
+    }
+  }
+  else
+  {
+      cxx.libs += mkl_sycl_blas.lib     \
+                  mkl_intel_ilp64.lib   \
+                  mkl_tbb_thread.lib    \
+                  mkl_core.lib          \
+                  tbb.lib               \
+                  OpenCL.lib
+  }
+}
+else
+{
+  lib{onemath_blas_mklcpu}:
+  {
+    # cxx.loptions += -L/opt/intel/oneapi/mkl/2025.2/lib \
+    #                 -L/opt/intel/oneapi/compiler/2025.2/lib
+
+    cxx.libs += -lmkl_sycl_blas         \
+                -lmkl_intel_ilp64       \
+                -lmkl_tbb_thread        \
+                -lmkl_core              \
+                -ltbb                   \
+                -lOpenCL
+  }
+}
 
 # Export options.
 #
@@ -244,9 +331,9 @@ lib{onemath}:
 # the version module for details on the version.* variable values.
 #
 if $version.pre_release
-  lib{onemath}: bin.lib.version = "-$version.project_id"
+  lib{$all_libs}: bin.lib.version = "-$version.project_id"
 else
-  lib{onemath}: bin.lib.version = "-$version.major.$version.minor"
+  lib{$all_libs}: bin.lib.version = "-$version.major.$version.minor"
 
 # Don't install private headers.
 #
