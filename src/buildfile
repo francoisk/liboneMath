@@ -1,5 +1,5 @@
-intf_libs = # Interface dependencies.
-impl_libs = # Implementation dependencies.
+#intf_libs = # Interface dependencies.
+#impl_libs = # Implementation dependencies.
 #import xxxx_libs += libhello%lib{hello}
 
 import! clang_offload_packager = icpx%exe{clang-offload-packager}
@@ -110,34 +110,37 @@ oneapi/math/detail/hxx{config}: in{config}
 #
 #   icpx -### -fsycl --offload-new-driver -o foo.o foo.cpp
 #
-libs{onemath}: blas/objs{blas_loader_host.so.o}
-liba{onemath}: blas/obja{blas_loader_host.a.o}
 
-              # lapack/cxx{lapack_loader}
-              # rng/cxx{rng_loader}               \
-              # dft/backends/cxx{descriptor}      \
-              # dft/cxx{dft_loader}               \
-              # sparse_blas/cxx{sparse_blas_loader}
+src = blas/blas_loader          \
+      dft/backends/descriptor   \
+      dft/dft_loader            \
+      lapack/lapack_loader      \
+      rng/rng_loader            \
+      sparse_blas/sparse_blas_loader
 
-# Host object
-#
-blas/objs{blas_loader_host.so.o}: blas/cxx{blas_loader}
-blas/objs{blas_loader_host.so.o}: blas/objs{blas_loader_device_offload.so.o}: \
-  include = adhoc
+for n: $src
+{
+  libs{onemath}: objs{$(n)_host.so.o}
+  liba{onemath}: obja{$(n)_host.a.o}
 
-blas/obja{blas_loader_host.a.o}:  blas/cxx{blas_loader}
-blas/obja{blas_loader_host.a.o}:  blas/obja{blas_loader_device_offload.a.o}: \
-  include = adhoc
+  # Host object
+  #
+  objs{$(n)_host.so.o}: cxx{$(n)}
+  objs{$(n)_host.so.o}: objs{$(n)_device_offload.so.o}: include = adhoc
 
-# Device object
-#
-blas/objs{blas_loader_device.so.o}: blas/cxx{blas_loader}
-blas/obja{blas_loader_device.a.o}:  blas/cxx{blas_loader}
+  obja{$(n)_host.a.o}: cxx{$(n)}
+  obja{$(n)_host.a.o}: obja{$(n)_device_offload.a.o}: include = adhoc
 
-# Device offload object
-#
-blas/objs{blas_loader_device_offload.so.o}: blas/objs{blas_loader_device.so.o}
-blas/obja{blas_loader_device_offload.a.o}:  blas/obja{blas_loader_device.a.o}
+  # Device object
+  #
+  objs{$(n)_device.so.o}: cxx{$(n)}
+  obja{$(n)_device.a.o}:  cxx{$(n)}
+
+  # Device offload object
+  #
+  objs{$(n)_device_offload.so.o}: objs{$(n)_device.so.o}
+  obja{$(n)_device_offload.a.o}:  obja{$(n)_device.a.o}
+}
 
 # Generate the device offload object using the clang-offload-packager tool.
 #
@@ -168,39 +171,50 @@ out_pfx_src = [dir_path] $out_root/src/
 src_pfx_src = [dir_path] $src_root/src/
 
 cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src"       \
-                "-I$out_pfx_inc" "-I$src_pfx_inc"       \
-                "-I$src_pfx_src/include/"
+                "-I$out_pfx_inc" "-I$src_pfx_inc"
 
-# Need to add this path manually because we don't pass -fsycl during header
-# extraction. @@ TODO Make this path configurable.
+# $src_pfx_src/include/: "function_table_initializer.hpp"
 #
-cxx.poptions += "-isystem/opt/intel/oneapi/compiler/2025.2/include/"
+cxx.poptions += "-I$src_pfx_src/include/"
 
-#obja{*}: cxx.poptions += -DONEAPI_STATIC_BUILD
-#objs{*}: cxx.poptions += -DONEAPI_SHARED_BUILD
+if ($cxx.target.class == 'windows')
+  objs{*}: cxx.poptions += -Donemath_EXPORTS
 
 objs{*}: cxx.coptions += -fsycl --offload-new-driver
 obja{*}: cxx.coptions += -fsycl --offload-new-driver
 
-# Build options for the host object:
-#
-# - Compile for host only
-# - Embed the device offload object inside the host object
-#
-blas/objs{blas_loader_host.so.o}: cxx.coptions +=       \
-  -fsycl-host-only                                      \
-  -Xclang -fembed-offload-object="$out_base/blas/blas_loader_device_offload.so.o"
+dft/backends/
+{
+  if ($cxx.class == 'gcc')
+  {
+    # From upstream/cmake/WarningsUtils.cmake.
+    #
+    {objs obja}{*}: cxx.coptions += -Wall -Wextra -Wshadow -Wconversion -Wpedantic
+  }
+}
 
-blas/obja{blas_loader_host.a.o}: cxx.coptions +=        \
-  -fsycl-host-only                                      \
-  -Xclang -fembed-offload-object="$out_base/blas/blas_loader_device_offload.a.o"
+for n: $src
+{
+  # Build options for the host object:
+  #
+  # - Compile for host only
+  # - Embed the device offload object inside the host object
+  #
+  objs{$(n)_host.so.o}: cxx.coptions += \
+    -fsycl-host-only                    \
+    -Xclang -fembed-offload-object="$out_root/src/$(n)_device_offload.so.o"
 
-# Build options for the device object:
-#
-# - Compile for the device only
-#
-blas/objs{blas_loader_device.so.o}: cxx.coptions += -fsycl-device-only
-blas/obja{blas_loader_device.a.o}:  cxx.coptions += -fsycl-device-only
+  obja{$(n)_host.a.o}: cxx.coptions +=  \
+    -fsycl-host-only                    \
+    -Xclang -fembed-offload-object="$out_root/src/$(n)_device_offload.a.o"
+
+  # Build options for the device object:
+  #
+  # - Compile for the device only
+  #
+  objs{$(n)_device.so.o}: cxx.coptions += -fsycl-device-only
+  obja{$(n)_device.a.o}:  cxx.coptions += -fsycl-device-only
+}
 
 if ($cxx.target.class == 'windows')
 {
@@ -217,11 +231,8 @@ else
 lib{onemath}:
 {
   cxx.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"
-  cxx.export.libs = $intf_libs
+  # cxx.export.libs = $intf_libs
 }
-
-#liba{onemath}: cxx.export.poptions += -DONEAPI_STATIC
-#libs{onemath}: cxx.export.poptions += -DONEAPI_SHARED
 
 # For pre-releases use the complete version to make sure they cannot
 # be used in place of another pre-release or the final version. See
