@@ -111,18 +111,23 @@ oneapi/math/detail/hxx{config}: in{config}
 #   icpx -### -fsycl --offload-new-driver -o foo.o foo.cpp
 #
 
-src = blas/blas_loader          \
-      dft/backends/descriptor   \
-      dft/dft_loader            \
-      lapack/lapack_loader      \
-      rng/rng_loader            \
-      sparse_blas/sparse_blas_loader
+onemath_src = blas/blas_loader          \
+	      dft/backends/descriptor   \
+	      dft/dft_loader            \
+	      lapack/lapack_loader      \
+	      rng/rng_loader            \
+	      sparse_blas/sparse_blas_loader
 
-for n: $src
+all_src = $onemath_src
+
+for n: $onemath_src
 {
   libs{onemath}: objs{$(n)_host.so.o}
   liba{onemath}: obja{$(n)_host.a.o}
+}
 
+for n: $all_src
+{
   # Host object
   #
   objs{$(n)_host.so.o}: cxx{$(n)}
@@ -193,7 +198,7 @@ dft/backends/
   }
 }
 
-for n: $src
+for n: $all_src
 {
   # Build options for the host object:
   #
