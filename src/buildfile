@@ -202,6 +202,16 @@ blas/obja{blas_loader_host.a.o}: cxx.coptions +=        \
 blas/objs{blas_loader_device.so.o}: cxx.coptions += -fsycl-device-only
 blas/obja{blas_loader_device.a.o}:  cxx.coptions += -fsycl-device-only
 
+if ($cxx.target.class == 'windows')
+{
+  if ($cxx.target.system == 'mingw32')
+    lib{onemath}: cxx.libs += -lsycl
+  else
+    lib{onemath}: cxx.libs += sycl.lib
+}
+else
+  lib{onemath}: cxx.libs += -lsycl
+
 # Export options.
 #
 lib{onemath}:
