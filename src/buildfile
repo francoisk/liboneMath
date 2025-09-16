@@ -32,7 +32,7 @@ if ($build.mode != 'skeleton')
   ifn $backends
     fail "no supported backends enabled"
   else
-    info "enabled backends:" $backends
+    text "enabled backends:" $backends
 }
 
 all_libs = onemath \
@@ -265,65 +265,63 @@ for n: $all_src
 # /opt/intel/oneapi/compiler/2025.2/lib
 #
 
+sys_libs =
 if ($cxx.target.class == 'windows')
 {
   if ($cxx.target.system == 'mingw32')
-    lib{$all_libs}: cxx.libs += -lsycl
+    sys_libs = -lsycl
   else
-    lib{$all_libs}: cxx.libs += sycl.lib
+    sys_libs = sycl.lib
 }
 else
-  lib{$all_libs}: cxx.libs += -lsycl
+  sys_libs += -lsycl
 
+lib{$all_libs}: cxx.libs += $sys_libs
+
+# cxx.loptions += -L/opt/intel/oneapi/mkl/2025.2/lib \
+#                 -L/opt/intel/oneapi/compiler/2025.2/lib
 if ($cxx.target.class == 'windows')
 {
   if ($cxx.target.system == 'mingw32')
   {
-    lib{onemath_blas_mklcpu}:
-    {
-      # cxx.loptions += -L/opt/intel/oneapi/mkl/2025.2/lib \
-      #                 -L/opt/intel/oneapi/compiler/2025.2/lib
-
-      cxx.libs += -lmkl_sycl_blas       \
-                  -lmkl_intel_ilp64     \
-                  -lmkl_tbb_thread      \
-                  -lmkl_core            \
-                  -ltbb                 \
-                  -lOpenCL
-    }
-  }
-  else
-  {
-      cxx.libs += mkl_sycl_blas.lib     \
-                  mkl_intel_ilp64.lib   \
-                  mkl_tbb_thread.lib    \
-                  mkl_core.lib          \
-                  tbb.lib               \
-                  OpenCL.lib
-  }
-}
-else
-{
-  lib{onemath_blas_mklcpu}:
-  {
-    # cxx.loptions += -L/opt/intel/oneapi/mkl/2025.2/lib \
-    #                 -L/opt/intel/oneapi/compiler/2025.2/lib
-
-    cxx.libs += -lmkl_sycl_blas         \
+    sys_libs += -lmkl_sycl_blas         \
                 -lmkl_intel_ilp64       \
                 -lmkl_tbb_thread        \
                 -lmkl_core              \
                 -ltbb                   \
                 -lOpenCL
   }
+  else
+  {
+    sys_libs += mkl_sycl_blas.lib       \
+                mkl_intel_ilp64.lib     \
+                mkl_tbb_thread.lib      \
+                mkl_core.lib            \
+                tbb.lib                 \
+                OpenCL.lib
+  }
 }
+else
+{
+  sys_libs += -lmkl_sycl_blas   \
+              -lmkl_intel_ilp64 \
+              -lmkl_tbb_thread  \
+              -lmkl_core        \
+              -ltbb             \
+              -lOpenCL
+}
+
+lib{onemath_blas_mklcpu}: cxx.libs += $sys_libs
 
 # Export options.
 #
 lib{onemath}:
 {
-  cxx.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"
-  # cxx.export.libs = $intf_libs
+  cxx.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"       \
+                        "-I$out_pfx_src"                        \
+                        -DMKL_ILP64
+
+  cxx.export.libs = -lsycl
 }
 
 # For pre-releases use the complete version to make sure they cannot
