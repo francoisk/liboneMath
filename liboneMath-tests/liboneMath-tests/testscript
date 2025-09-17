@@ -1,9 +1,1 @@
-: basics
-:
-$* 'World' >'Hello, World!'
-
-: missing-name
-:
-$* 2>>EOE != 0
-error: missing name
-EOE
+env LD_LIBRARY_PATH="$ld_library_path" -- $* >- 2>!

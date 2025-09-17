@@ -1,0 +1,5 @@
+blas symlink=dir
+lapack symlink=dir
+dft symlink=dir
+rng symlink=dir
+sparse_blas symlink=dir

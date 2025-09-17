@@ -1,6 +1,7 @@
 : 1
 name: liboneMath-tests
-version: 0.1.0-a.0.z
+version: 0.8.0-a.0.z
+upstream-version: 0.8
 type: exe
 language: c++
 project: oneMath_new
@@ -12,4 +13,4 @@ email: francoisk777@gmail.com
 #build-error-email: francoisk777@gmail.com
 depends: * build2 >= 0.17.0
 depends: * bpkg >= 0.17.0
-#depends: libhello ^1.0.0
+depends: gtest ^1.11.0

@@ -1,5 +1,8 @@
-liboneMath-tests
-
-# Testscript output directory (can be symlink).
+# Test executables.
 #
-test-liboneMath-tests
+test_*
+
+# Testscript output directories (can be symlinks).
+#
+test
+test-*
