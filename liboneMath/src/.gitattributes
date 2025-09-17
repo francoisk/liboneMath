@@ -1,6 +1,4 @@
 blas          symlink=dir
-buildfile     symlink=dir
-config.hpp.in symlink=dir
 dft           symlink=dir
 include       symlink=dir
 lapack        symlink=dir

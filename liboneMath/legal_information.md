@@ -1,1 +1,1 @@
-upstream/legal_information.md
+../upstream/legal_information.md
