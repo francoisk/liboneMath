@@ -4,7 +4,7 @@ version: 0.8.0-a.0.z
 upstream-version: 0.8
 type: exe
 language: c++
-project: oneMath_new
+project: liboneMath-tests
 summary: liboneMath-tests C++ executable
 license: other: proprietary ; Not free/open source.
 description-file: README.md
