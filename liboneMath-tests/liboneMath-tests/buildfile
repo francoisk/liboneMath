@@ -31,16 +31,16 @@ for t: $blas_ct_src
   exe{test_main_blas_ct}: $d/obje{$(n)_host.exe.o}: $libs $blas_mklcpu
 }
 
-obj{*}: cxx.poptions += "-I$src_root/liboneMath-tests/include"
+obje{*}: cxx.poptions += "-I$src_base/include"
 
-rt/obj{*}: cxx.poptions += "-I$src_root/liboneMath-tests/rt/blas/include" \
+rt/obje{*}: cxx.poptions += "-I$src_base/blas/include" \
                            -DCALL_RT_API
 
-ct/obj{*}: cxx.poptions += "-I$src_root/liboneMath-tests/ct/blas/include"
+ct/obje{*}: cxx.poptions += "-I$src_base/blas/include"
 
 # Set up the reference BLAS implementation.
 #
-obj{*}: cxx.poptions +=                                                         \
+obje{*}: cxx.poptions +=                                                         \
   "-I/home/fk/sw/src/oneMath_ref/include"                                       \
   -DONEMATH_REF_BLAS_LIBNAME="\"/home/fk/sw/src/oneMath_ref/lib/libblas.so\""   \
   -DONEMATH_REF_CBLAS_LIBNAME="\"/home/fk/sw/src/oneMath_ref/lib/libcblas.so\""
