@@ -1,0 +1,57 @@
+import onemath     = liboneMath%lib{onemath}
+import blas_mklcpu = liboneMath%lib{onemath_blas_mklcpu}
+import libs        = gtest%liba{gtest} $onemath
+
+import! clang_offload_packager = icpx%exe{clang-offload-packager}
+
+blas_rt_src = cxx{main_test}    \
+              rt/blas/cxx{**}
+
+blas_ct_src = cxx{main_test}    \
+              ct/cxx{**}
+
+ld_library_path = "$($onemath: out_root)/src/:$getenv(LD_LIBRARY_PATH)"
+
+./: exe{test_main_blas_rt}: testscript
+./: exe{test_main_blas_ct}: testscript
+
+for t: $blas_rt_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  exe{test_main_blas_rt}: $d/obje{$(n)_host.exe.o}: $libs
+}
+
+for t: $blas_ct_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  exe{test_main_blas_ct}: $d/obje{$(n)_host.exe.o}: $libs $blas_mklcpu
+}
+
+obj{*}: cxx.poptions += "-I$src_root/upstream-tests/include"
+
+rt/obj{*}: cxx.poptions += "-I$src_root/upstream-tests/rt/blas/include" \
+                           -DCALL_RT_API
+
+ct/obj{*}: cxx.poptions += "-I$src_root/upstream-tests/ct/blas/include"
+
+# Set up the reference BLAS implementation.
+#
+obj{*}: cxx.poptions +=                                                         \
+  "-I/home/fk/sw/src/oneMath_ref/include"                                       \
+  -DONEMATH_REF_BLAS_LIBNAME="\"/home/fk/sw/src/oneMath_ref/lib/libblas.so\""   \
+  -DONEMATH_REF_CBLAS_LIBNAME="\"/home/fk/sw/src/oneMath_ref/lib/libcblas.so\""
+
+obje{*}: cxx.coptions += -fsycl-device-code-split=per_kernel
+
+sycl_exe_src = $blas_rt_src $blas_ct_src
+import [once] liboneMath%buildfile{sycl_compilation}
+
+# Libraries
+#
+exe{test_main_blas_rt}: $libs
+
+exe{test_main_blas_ct}: $libs $blas_mklcpu
