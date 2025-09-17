@@ -33,25 +33,23 @@ for t: $blas_ct_src
 
 obje{*}: cxx.poptions += "-I$src_base/include"
 
-rt/obje{*}: cxx.poptions += "-I$src_base/blas/include" \
-                           -DCALL_RT_API
+rt/obje{*}: cxx.poptions += "-I$src_base/blas/include"  \
+                            -DCALL_RT_API
 
 ct/obje{*}: cxx.poptions += "-I$src_base/blas/include"
 
 # Set up the reference BLAS implementation.
 #
-obje{*}: cxx.poptions +=                                                         \
-  "-I/home/fk/sw/src/oneMath_ref/include"                                       \
-  -DONEMATH_REF_BLAS_LIBNAME="\"/home/fk/sw/src/oneMath_ref/lib/libblas.so\""   \
-  -DONEMATH_REF_CBLAS_LIBNAME="\"/home/fk/sw/src/oneMath_ref/lib/libcblas.so\""
+ref_blas_incdir = $config.liboneMath_tests.reference_blas_incdir
+ref_blas_libdir = $config.liboneMath_tests.reference_blas_libdir
 
-obje{*}: cxx.coptions += -fsycl-device-code-split=per_kernel
+obje{*}: cxx.poptions +=                                        \
+  "-I$ref_blas_incdir"                                          \
+  -DONEMATH_REF_BLAS_LIBNAME="\"$ref_blas_libdir/libblas.so\""  \
+  -DONEMATH_REF_CBLAS_LIBNAME="\"$ref_blas_libdir/libcblas.so\""
 
 sycl_exe_src = $blas_rt_src $blas_ct_src
 import [once] liboneMath%buildfile{sycl_compilation}
 
-# Libraries
-#
 exe{test_main_blas_rt}: $libs
-
 exe{test_main_blas_ct}: $libs $blas_mklcpu
