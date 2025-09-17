@@ -1,4 +1,4 @@
-./: {*/ -build/ -upstream/ -tests/}     \
+./: {*/ -build/ -upstream/}             \
     doc{README.md PACKAGE-README.md}    \
     legal{LICENSE legal_information.md} \
     manifest
