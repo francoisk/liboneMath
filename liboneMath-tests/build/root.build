@@ -14,3 +14,26 @@ exe{*}: test = true
 # The test target for cross-testing (running tests under Wine, etc).
 #
 test.target = $cxx.target
+
+# Location of the reference BLAS implementation which the upstream tests use
+# to check its own answers.
+#
+# Note that with the upstream build I initially did not provide a reference
+# BLAS but everything still compiled and linked successfully, but some of the
+# upstream tests were failing. Turns out they were dispatching to oneMKL's own
+# BLAS functions (which can't handle negative values for certain parameters).
+#
+config [dir_path] config.liboneMath_tests.reference_blas_incdir
+config [dir_path] config.liboneMath_tests.reference_blas_libdir
+
+# @@ TODO If support is added to disable the BLAS domain, don't check these
+#    paths check if the blas domain is disabled.
+#
+if ($build.mode != 'skeleton')
+{
+  if (!$defined(config.liboneMath_tests.reference_blas_incdir))
+    fail "config.liboneMath_tests.reference_blas_incdir cannot be null"
+
+  if (!$defined(config.liboneMath_tests.reference_blas_libdir))
+    fail "config.liboneMath_tests.reference_blas_libdir cannot be null"
+}
