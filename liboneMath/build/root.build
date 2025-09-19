@@ -15,6 +15,17 @@ cxx{*}: extension = cpp
 #
 test.target = $cxx.target
 
+# Space-separated list of include directories to be set (via `-isystem`) when
+# compiling backend library code.
+#
+config [dir_paths] config.liboneMath.backend_incdirs
+
+if ($build.mode != 'skeleton')
+{
+  if! $defined(config.liboneMath.backend_incdirs)
+    fail "config.liboneMath.backend_incdirs is undefined"
+}
+
 # Backend-related config variables
 #
 config [bool] config.liboneMath.enable_armpl_backend ?= false

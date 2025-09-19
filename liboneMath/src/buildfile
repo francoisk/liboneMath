@@ -134,12 +134,12 @@ cxx.poptions += "-I$src_pfx_src/include/"
 #
 blas/backends/
 {
-  # <mkl/blas.hpp>
-  #
+  for ip: $config.liboneMath.backend_incdirs
+    cxx.poptions += "-isystem$ip"
+
   # MKL_ILP64: Define if using the MKL ILP64 (64-bit) libraries.
   #
-  cxx.poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi" \
-                  -DMKL_ILP64
+  cxx.poptions += -DMKL_ILP64
 }
 
 if ($cxx.target.class == 'windows')

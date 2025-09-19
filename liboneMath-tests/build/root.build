@@ -19,9 +19,10 @@ test.target = $cxx.target
 # to check its own answers.
 #
 # Note that with the upstream build I initially did not provide a reference
-# BLAS but everything still compiled and linked successfully, but some of the
-# upstream tests were failing. Turns out they were dispatching to oneMKL's own
-# BLAS functions (which can't handle negative values for certain parameters).
+# BLAS but everything still compiled and linked successfully. The only sign
+# that something was wrong was that some of the upstream tests were
+# failing. Turns out they were dispatching to oneMKL's own BLAS functions
+# (which don't expect negative values for certain parameters).
 #
 config [dir_path] config.liboneMath_tests.reference_blas_incdir
 config [dir_path] config.liboneMath_tests.reference_blas_libdir
@@ -31,9 +32,9 @@ config [dir_path] config.liboneMath_tests.reference_blas_libdir
 #
 if ($build.mode != 'skeleton')
 {
-  if (!$defined(config.liboneMath_tests.reference_blas_incdir))
-    fail "config.liboneMath_tests.reference_blas_incdir cannot be null"
+  if! $defined(config.liboneMath_tests.reference_blas_incdir)
+    fail "config.liboneMath_tests.reference_blas_incdir is undefined"
 
-  if (!$defined(config.liboneMath_tests.reference_blas_libdir))
-    fail "config.liboneMath_tests.reference_blas_libdir cannot be null"
+  if! $defined(config.liboneMath_tests.reference_blas_libdir)
+    fail "config.liboneMath_tests.reference_blas_libdir is undefined"
 }
