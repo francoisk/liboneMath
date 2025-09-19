@@ -134,8 +134,9 @@ cxx.poptions += "-I$src_pfx_src/include/"
 #
 blas/backends/
 {
-  for ip: $config.liboneMath.backend_incdirs
-    cxx.poptions += "-isystem$ip"
+  # @@ TODO Get this path from the upcoming build2 package that installs oneMKL.
+  #
+  cxx.poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi"
 
   # MKL_ILP64: Define if using the MKL ILP64 (64-bit) libraries.
   #
