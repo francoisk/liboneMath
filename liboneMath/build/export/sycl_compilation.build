@@ -1,7 +1,39 @@
 # Arrange for sycl sources to be compiled in two passes: once for the device
 # and once for the host.
 #
-#  @@ TODO Improve the above. Explain why it's necessary.
+# Necessary because neither build2 nor icpx can handle preprocessed output
+# containing code for both the device and host. Essentially everything is
+# duplicated in such output.
+#
+# build2 fails because it doesn't expect more than one target in make-format
+# dependency file output. icpx fails by complaining about the redefinition of
+# entities like structs and functions.
+#
+# Thus we separate compilation into device- and host-only stages.
+#
+# The device-only stage compiles only the SYCL kernel function(s) (and the
+# functions they call, AKA `device functions`) into SPIR64 format, which is an
+# intermediate representation which is compiled just-in-time by the SYCL
+# runtime for the device the code is about to be offloaded to. This output
+# file is called the device image in SYCL terminology. SPIR64 is the default
+# but can be changed using the -fsycl-targets option, but that should only be
+# necessary if using ahead-of-time compilation which does not appear to be
+# commonly used.
+#
+# The device image is then transformed into an offload binary (oneAPI DPC++
+# terminology) using the clang-offload-packager tool.
+#
+# Finally the offload binary is embedded inside the host object file using the
+# -fembed-offload-object oneAPI DPC++ compiler option. This object is then
+# linked into the library or executable binary.
+#
+# Note that `icpx -fsycl -fsycl-offload-new-driver -c foo.cpp` actually
+# performs these same steps underneath; see below.
+#
+# References:
+#
+# https://intel.github.io/llvm/design/OffloadDesign.html
+# https://discourse.llvm.org/t/building-device-ir-and-host-ir-into-an-executable/84384/4
 
 # How to use:
 #
@@ -30,6 +62,13 @@
 #   obje{foo_device.exe.o}
 #   obje{foo_device_offload.exe.o}
 #
+# Note that the _device.o file is actually LLVM bytecode so should probably
+# have a .bc extension. The _device_offload.o file seems to be closer to an
+# object file but not quite. The clang-offload-packager documentation example
+# uses .bin for its output.
+#
+#   @@ TODO Consider defining a spir64{} target type for the device image.
+#
 # And the following dependencies will be declared:
 #
 #   obj?{foo_host}:           cxx{foo}
@@ -41,7 +80,7 @@
 # Under build2 the desired compilation commands for a source file foo.cpp is
 # as follows:
 #
-#   Extract dependencies and compile the device object from foo.cpp. Then
+#   Extract dependencies and compile the device image from foo.cpp. Then
 #   convert it into an offload binary (an object that can be embedded inside
 #   the host object).
 #
@@ -61,7 +100,7 @@
 #          -Xclang -fembed-offload-object=foo_device_offload.so.o
 #          -o foo_host.o -c foo_host.ii
 #
-#   Link the library using the various host objects with the device code
+#   Link the library using the various host objects with the device images
 #   embedded in them as input.
 #
 #     icpx -shared -o libonemath.so foo_host.o bar_host.o baz_host.o
@@ -70,7 +109,7 @@
 # single compiler invocation (the default method of operation) with debug
 # output enabled (-###):
 #
-#   icpx -### -fsycl --offload-new-driver -o foo.o foo.cpp
+#   icpx -### -fsycl --offload-new-driver -c foo.cpp
 
 # Declare dependencies and coptions for shared and static library objects.
 #
@@ -136,7 +175,7 @@ for t: $sycl_exe_src
 
   # Device object
   #
-  $d/obje{$(n)_device.exe.o}: $d/cxx{$(n)} $libs
+  $d/obje{$(n)_device.exe.o}: $d/cxx{$(n)}
 
   # Device offload object
   #
