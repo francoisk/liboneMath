@@ -35,6 +35,9 @@ if ($build.mode != 'skeleton')
     text "enabled backends:" $backends
 }
 
+enable_blas = ($config.liboneMath.enable_mklcpu_backend ||      \
+               $config.liboneMath.enable_mklgpu_backend)
+
 all_libs = onemath              \
            onemath_blas_mklcpu  \
            onemath_blas_mklgpu
@@ -48,6 +51,41 @@ all_libs = onemath              \
 lib{onemath}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
 lib{onemath_blas_mklcpu}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
 
+# Metadata.
+#
+lib{onemath}:
+{
+  export.metadata = 1 libonemath
+
+  libonemath.enable_armpl_backend = $config.liboneMath.enable_armpl_backend
+  libonemath.enable_armpl_openrng = $config.liboneMath.enable_armpl_openrng
+  libonemath.enable_cublas_backend = $config.liboneMath.enable_cublas_backend
+  libonemath.enable_cufft_backend = $config.liboneMath.enable_cufft_backend
+  libonemath.enable_curand_backend = $config.liboneMath.enable_curand_backend
+  libonemath.enable_cusolver_backend = $config.liboneMath.enable_cusolver_backend
+  libonemath.enable_cusparse_backend = $config.liboneMath.enable_cusparse_backend
+  libonemath.enable_mklcpu_backend = $config.liboneMath.enable_mklcpu_backend
+  libonemath.enable_mklgpu_backend = $config.liboneMath.enable_mklgpu_backend
+  libonemath.enable_netlib_backend = $config.liboneMath.enable_netlib_backend
+  libonemath.enable_generic_blas_backend = $config.liboneMath.enable_generic_blas_backend
+  libonemath.enable_generic_blas_backend_amd_gpu = $config.liboneMath.enable_generic_blas_backend_amd_gpu
+  libonemath.enable_generic_blas_backend_intel_cpu = $config.liboneMath.enable_generic_blas_backend_intel_cpu
+  libonemath.enable_generic_blas_backend_intel_gpu = $config.liboneMath.enable_generic_blas_backend_intel_gpu
+  libonemath.enable_generic_blas_backend_nvidia_gpu = $config.liboneMath.enable_generic_blas_backend_nvidia_gpu
+  libonemath.generic_blas_enable_complex = $config.liboneMath.generic_blas_enable_complex
+  libonemath.generic_blas_enable_usm = $config.liboneMath.generic_blas_enable_usm
+  libonemath.enable_portfft_backend = $config.liboneMath.enable_portfft_backend
+  libonemath.enable_rocblas_backend = $config.liboneMath.enable_rocblas_backend
+  libonemath.enable_rocfft_backend = $config.liboneMath.enable_rocfft_backend
+  libonemath.enable_rocrand_backend = $config.liboneMath.enable_rocrand_backend
+  libonemath.enable_rocsolver_backend = $config.liboneMath.enable_rocsolver_backend
+  libonemath.enable_rocsparse_backend = $config.liboneMath.enable_rocsparse_backend
+
+  # True if the BLAS domain is enabled.
+  #
+  libonemath.enable_blas = $enable_blas
+}
+
 # Generate config.hpp.
 #
 oneapi/math/detail/hxx{config}: in{config}
@@ -55,7 +93,7 @@ oneapi/math/detail/hxx{config}: in{config}
   autoconf.flavor = cmake
 
   ONEMATH_ENABLE_ARMPL_BACKEND = $config.liboneMath.enable_armpl_backend
-  ONEMATH_ENABLE_ARMPL_OPENRNG = false
+  ONEMATH_ENABLE_ARMPL_OPENRNG = $config.liboneMath.enable_armpl_openrng
   ONEMATH_ENABLE_CUBLAS_BACKEND = $config.liboneMath.enable_cublas_backend
   ONEMATH_ENABLE_CUFFT_BACKEND = $config.liboneMath.enable_cufft_backend
   ONEMATH_ENABLE_CURAND_BACKEND = $config.liboneMath.enable_curand_backend
@@ -65,12 +103,12 @@ oneapi/math/detail/hxx{config}: in{config}
   ONEMATH_ENABLE_MKLGPU_BACKEND = $config.liboneMath.enable_mklgpu_backend
   ONEMATH_ENABLE_NETLIB_BACKEND = $config.liboneMath.enable_netlib_backend
   ONEMATH_ENABLE_GENERIC_BLAS_BACKEND = $config.liboneMath.enable_generic_blas_backend
-  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_AMD_GPU = false
-  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_INTEL_CPU = false
-  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_INTEL_GPU = false
-  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_NVIDIA_GPU = false
-  ONEMATH_GENERIC_BLAS_ENABLE_COMPLEX = false
-  ONEMATH_GENERIC_BLAS_ENABLE_USM = false
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_AMD_GPU = $config.liboneMath.enable_generic_blas_backend_amd_gpu
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_INTEL_CPU = $config.liboneMath.enable_generic_blas_backend_intel_cpu
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_INTEL_GPU = $config.liboneMath.enable_generic_blas_backend_intel_gpu
+  ONEMATH_ENABLE_GENERIC_BLAS_BACKEND_NVIDIA_GPU = $config.liboneMath.enable_generic_blas_backend_nvidia_gpu
+  ONEMATH_GENERIC_BLAS_ENABLE_COMPLEX = $config.liboneMath.generic_blas_enable_complex
+  ONEMATH_GENERIC_BLAS_ENABLE_USM = $config.liboneMath.generic_blas_enable_usm
   ONEMATH_ENABLE_PORTFFT_BACKEND = $config.liboneMath.enable_portfft_backend
   ONEMATH_ENABLE_ROCBLAS_BACKEND = $config.liboneMath.enable_rocblas_backend
   ONEMATH_ENABLE_ROCFFT_BACKEND = $config.liboneMath.enable_rocfft_backend
@@ -165,13 +203,19 @@ lib{onemath_blas_mklcpu}: cxx.libs += $common_sys_libs $backend_sys_libs
 
 # Export options.
 #
+incdirs = "-I$out_pfx_inc" "-I$src_pfx_inc"     \
+          "-I$out_pfx_src"
+
 lib{onemath}:
 {
-  cxx.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"       \
-                        "-I$out_pfx_src" $libonemath_export_poptions
+  cxx.export.poptions = $incdirs $libonemath_export_poptions
+  cxx.export.libs     = $libonemath_export_libs
+}
 
-
-  cxx.export.libs = $libonemath_export_libs
+lib{onemath_blas_mklcpu}:
+{
+  cxx.export.poptions = $incdirs
+  cxx.export.libs     =
 }
 
 # For pre-releases use the complete version to make sure they cannot

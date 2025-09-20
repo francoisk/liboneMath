@@ -18,7 +18,7 @@ test.target = $cxx.target
 # Backend-related config variables
 #
 config [bool] config.liboneMath.enable_armpl_backend ?= false
-# config [bool] config.liboneMath.enable_armpl_openrng ?= false
+config [bool] config.liboneMath.enable_armpl_openrng ?= false
 config [bool] config.liboneMath.enable_cublas_backend ?= false
 config [bool] config.liboneMath.enable_cufft_backend ?= false
 config [bool] config.liboneMath.enable_curand_backend ?= false
@@ -28,12 +28,12 @@ config [bool] config.liboneMath.enable_mklcpu_backend ?= false
 config [bool] config.liboneMath.enable_mklgpu_backend ?= false
 config [bool] config.liboneMath.enable_netlib_backend ?= false
 config [bool] config.liboneMath.enable_generic_blas_backend ?= false
-# config [bool] config.liboneMath.enable_generic_blas_backend_amd_gpu ?= false
-# config [bool] config.liboneMath.enable_generic_blas_backend_intel_cpu ?= false
-# config [bool] config.liboneMath.enable_generic_blas_backend_intel_gpu ?= false
-# config [bool] config.liboneMath.enable_generic_blas_backend_nvidia_gpu ?= false
-# config [bool] config.liboneMath.generic_blas_enable_complex ?= false
-# config [bool] config.liboneMath.generic_blas_enable_usm ?= false
+config [bool] config.liboneMath.enable_generic_blas_backend_amd_gpu ?= false
+config [bool] config.liboneMath.enable_generic_blas_backend_intel_cpu ?= false
+config [bool] config.liboneMath.enable_generic_blas_backend_intel_gpu ?= false
+config [bool] config.liboneMath.enable_generic_blas_backend_nvidia_gpu ?= false
+config [bool] config.liboneMath.generic_blas_enable_complex ?= false
+config [bool] config.liboneMath.generic_blas_enable_usm ?= false
 config [bool] config.liboneMath.enable_portfft_backend ?= false
 config [bool] config.liboneMath.enable_rocblas_backend ?= false
 config [bool] config.liboneMath.enable_rocfft_backend ?= false
