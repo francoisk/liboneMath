@@ -134,7 +134,8 @@ cxx.poptions += "-I$src_pfx_src/include/"
 #
 blas/backends/
 {
-  # @@ TODO Get this path from the upcoming build2 package that installs oneMKL.
+  # @@ TODO [make configurable] Get this path from the upcoming build2 package
+  #    that installs oneMKL.
   #
   cxx.poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi"
 
