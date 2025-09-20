@@ -40,3 +40,9 @@ config [bool] config.liboneMath.enable_rocfft_backend ?= false
 config [bool] config.liboneMath.enable_rocrand_backend ?= false
 config [bool] config.liboneMath.enable_rocsolver_backend ?= false
 config [bool] config.liboneMath.enable_rocsparse_backend ?= false
+
+if ($config.liboneMath.enable_mklcpu_backend || \
+    $config.liboneMath.enable_mklgpu_backend)
+{
+  source build/mkl.build
+}

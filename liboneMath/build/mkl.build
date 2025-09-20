@@ -1,0 +1,62 @@
+backend_poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi"
+
+# MKL_ILP64: Define if using the MKL ILP64 (64-bit) libraries.
+#
+backend_poptions += -DMKL_ILP64
+
+# Note: On my Linux dev machine the MKL setvars script sets the following
+# LD_LIBRARY_PATH:
+#
+# /opt/intel/oneapi/tcm/1.4/lib:
+# /opt/intel/oneapi/umf/0.11/lib:
+# /opt/intel/oneapi/tbb/2022.2/env/../lib/intel64/gcc4.8:
+# /opt/intel/oneapi/mkl/2025.2/lib:
+# /opt/intel/oneapi/compiler/2025.2/lib
+#
+common_sys_libs =
+if ($cxx.target.class == 'windows')
+{
+  if ($cxx.target.system == 'mingw32')
+    common_sys_libs = -lsycl
+  else
+    common_sys_libs = sycl.lib
+}
+else
+  common_sys_libs += -lsycl
+
+# cxx.loptions += -L/opt/intel/oneapi/mkl/2025.2/lib \
+#                 -L/opt/intel/oneapi/compiler/2025.2/lib
+backend_sys_libs =
+if ($cxx.target.class == 'windows')
+{
+  if ($cxx.target.system == 'mingw32')
+  {
+    backend_sys_libs += -lmkl_sycl_blas         \
+                        -lmkl_intel_ilp64       \
+                        -lmkl_tbb_thread        \
+                        -lmkl_core              \
+                        -ltbb                   \
+                        -lOpenCL
+  }
+  else
+  {
+    backend_sys_libs += mkl_sycl_blas.lib       \
+                        mkl_intel_ilp64.lib     \
+                        mkl_tbb_thread.lib      \
+                        mkl_core.lib            \
+                        tbb.lib                 \
+                        OpenCL.lib
+  }
+}
+else
+{
+  backend_sys_libs += -lmkl_sycl_blas   \
+                      -lmkl_intel_ilp64 \
+                      -lmkl_tbb_thread  \
+                      -lmkl_core        \
+                      -ltbb             \
+                      -lOpenCL
+}
+
+# libonemath_export_poptions += -DMKL_ILP64
+# libonemath_export_libs     += -lsycl
