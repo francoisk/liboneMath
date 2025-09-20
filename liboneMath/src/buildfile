@@ -198,8 +198,15 @@ import [once] buildfile{sycl_compilation}
 
 # Libraries
 
-lib{$all_libs}:           cxx.libs += $common_sys_libs
-lib{onemath_blas_mklcpu}: cxx.libs += $common_sys_libs $backend_sys_libs
+lib{onemath}: $common_libs
+{
+  cxx.libs += $common_sys_libs
+}
+
+lib{onemath_blas_mklcpu}: $common_libs $backend_libs
+{
+  cxx.libs += $common_sys_libs $backend_sys_libs
+}
 
 # Export options.
 #
