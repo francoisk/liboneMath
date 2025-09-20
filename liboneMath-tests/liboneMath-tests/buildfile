@@ -1,8 +1,13 @@
 import onemath     = liboneMath%lib{onemath}
 import blas_mklcpu = liboneMath%lib{onemath_blas_mklcpu}
-import libs        = gtest%liba{gtest} $onemath
+import gtest       = gtest%liba{gtest}
 
 import! clang_offload_packager = icpx%exe{clang-offload-packager}
+
+blas   = $($onemath: libonemath.enable_blas)
+mklcpu = $($onemath: libonemath.enable_mklcpu_backend)
+
+ld_library_path = "$($onemath: out_root)/src/:$getenv(LD_LIBRARY_PATH)"
 
 blas_rt_src = cxx{main_test}    \
               rt/blas/cxx{**}
@@ -10,17 +15,18 @@ blas_rt_src = cxx{main_test}    \
 blas_ct_src = cxx{main_test}    \
               ct/cxx{**}
 
-ld_library_path = "$($onemath: out_root)/src/:$getenv(LD_LIBRARY_PATH)"
+./: exe{test_main_blas_rt}: include = $blas
+./: exe{test_main_blas_ct}: include = $blas
 
-./: exe{test_main_blas_rt}: testscript
-./: exe{test_main_blas_ct}: testscript
+exe{test_main_blas_rt}: testscript
+exe{test_main_blas_ct}: testscript
 
 for t: $blas_rt_src
 {
   n = $name($t)
   d = $directory($t)
 
-  exe{test_main_blas_rt}: $d/obje{$(n)_host.exe.o}: $libs
+  exe{test_main_blas_rt}: $d/obje{$(n)_host.exe.o}
 }
 
 for t: $blas_ct_src
@@ -28,15 +34,16 @@ for t: $blas_ct_src
   n = $name($t)
   d = $directory($t)
 
-  exe{test_main_blas_ct}: $d/obje{$(n)_host.exe.o}: $libs $blas_mklcpu
+  exe{test_main_blas_ct}: $d/obje{$(n)_host.exe.o}
 }
 
-obje{*}: cxx.poptions += "-I$src_base/include"
+# Build options
+#
+obje{*}         \
+rt/blas/obje{*} \
+ct/blas/obje{*}: cxx.poptions += "-I$src_base/include"
 
-rt/obje{*}: cxx.poptions += "-I$src_base/blas/include"  \
-                            -DCALL_RT_API
-
-ct/obje{*}: cxx.poptions += "-I$src_base/blas/include"
+rt/obje{*}: cxx.poptions += -DCALL_RT_API
 
 # Set up the reference BLAS implementation.
 #
@@ -51,5 +58,30 @@ obje{*}: cxx.poptions +=                                        \
 sycl_exe_src = $blas_rt_src $blas_ct_src
 import [once] liboneMath%buildfile{sycl_compilation}
 
-exe{test_main_blas_rt}: $libs
-exe{test_main_blas_ct}: $libs $blas_mklcpu
+# Libraries
+#
+for t: $blas_rt_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
+
+  $d/obje{$all_obj}: $onemath $gtest
+}
+
+for t: $blas_ct_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
+
+  $d/obje{$all_obj}: $gtest
+  $d/obje{$all_obj}: $blas_mklcpu: include = $mklcpu
+}
+
+exe{test_main_blas_rt}: $onemath $gtest
+
+exe{test_main_blas_ct}: $gtest
+exe{test_main_blas_ct}: $blas_mklcpu: include = $mklcpu
