@@ -1,3 +1,10 @@
+import sycl            = oneMKL%lib{sycl}
+import mkl_core        = oneMKL%lib{mkl_core}
+import mkl_sycl_blas   = oneMKL%lib{mkl_sycl_blas}
+import mkl_sycl_lapack = oneMKL%lib{mkl_sycl_lapack}
+import mkl_intel_ilp64 = oneMKL%lib{mkl_intel_ilp64}
+import mkl_tbb_thread  = oneMKL%lib{mkl_tbb_thread}
+
 backend_poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi"
 
 # MKL_ILP64: Define if using the MKL ILP64 (64-bit) libraries.
@@ -13,50 +20,10 @@ backend_poptions += -DMKL_ILP64
 # /opt/intel/oneapi/mkl/2025.2/lib:
 # /opt/intel/oneapi/compiler/2025.2/lib
 #
-common_sys_libs =
-if ($cxx.target.class == 'windows')
-{
-  if ($cxx.target.system == 'mingw32')
-    common_sys_libs = -lsycl
-  else
-    common_sys_libs = sycl.lib
-}
-else
-  common_sys_libs += -lsycl
 
-# cxx.loptions += -L/opt/intel/oneapi/mkl/2025.2/lib \
-#                 -L/opt/intel/oneapi/compiler/2025.2/lib
-backend_sys_libs =
-if ($cxx.target.class == 'windows')
-{
-  if ($cxx.target.system == 'mingw32')
-  {
-    backend_sys_libs += -lmkl_sycl_blas         \
-                        -lmkl_intel_ilp64       \
-                        -lmkl_tbb_thread        \
-                        -lmkl_core              \
-                        -ltbb                   \
-                        -lOpenCL
-  }
-  else
-  {
-    backend_sys_libs += mkl_sycl_blas.lib       \
-                        mkl_intel_ilp64.lib     \
-                        mkl_tbb_thread.lib      \
-                        mkl_core.lib            \
-                        tbb.lib                 \
-                        OpenCL.lib
-  }
-}
-else
-{
-  backend_sys_libs += -lmkl_sycl_blas   \
-                      -lmkl_intel_ilp64 \
-                      -lmkl_tbb_thread  \
-                      -lmkl_core        \
-                      -ltbb             \
-                      -lOpenCL
-}
+common_libs += $sycl
 
-# libonemath_export_poptions += -DMKL_ILP64
-# libonemath_export_libs     += -lsycl
+backend_libs += $mkl_core               \
+                $mkl_sycl_blas          \
+                $mkl_intel_ilp64        \
+                $mkl_tbb_thread
