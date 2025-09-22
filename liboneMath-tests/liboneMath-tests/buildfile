@@ -1,151 +1,196 @@
 import onemath       = liboneMath%lib{onemath}
 import blas_mklcpu   = liboneMath%lib{onemath_blas_mklcpu}
 import lapack_mklcpu = liboneMath%lib{onemath_lapack_mklcpu}
+import dft_mklcpu    = liboneMath%lib{onemath_dft_mklcpu}
+import rng_mklcpu    = liboneMath%lib{onemath_rng_mklcpu}
+import sparse_blas_mklcpu = liboneMath%lib{onemath_sparse_blas_mklcpu}
 import gtest         = gtest%liba{gtest}
 import gtest_main    = gtest%liba{gtest_main}
 
 import! clang_offload_packager = icpx%exe{clang-offload-packager}
 
+# True if the corresponding domain or backend is enabled.
+#
 blas   = $($onemath: libonemath.enable_blas)
 lapack = $($onemath: libonemath.enable_lapack)
-mklcpu = $($onemath: libonemath.enable_mklcpu_backend)
+dft    = $($onemath: libonemath.enable_dft)
+rng    = $($onemath: libonemath.enable_rng)
+sparse = $($onemath: libonemath.enable_sparse)
 
+mklcpu = $($onemath: libonemath.enable_mklcpu_backend)
+mklgpu = $($onemath: libonemath.enable_mklgpu_backend)
+
+# LD_LIBRARY_PATH needs to be set so that the tests find the oneMKL libraries
+# during runtime (see testscript).
+#
+# @@ TODO Probably remove this once the oneMKL package is available.
+#
 ld_library_path = "$($onemath: out_root)/src/:$getenv(LD_LIBRARY_PATH)"
 
-blas_rt_src = cxx{main_test}    \
-              rt/blas/cxx{**}
+# Each domain's tests are split into runtime and compile time (rt/ct)
+# binaries.
+#
+blas_rt_src = rt/blas/cxx{**}
+blas_ct_src = ct/blas/cxx{**}
 
-blas_ct_src = cxx{main_test}    \
-              ct/blas/cxx{**}
+lapack_ct_src = ct/lapack/cxx{**}
+lapack_rt_src = rt/lapack/cxx{**}
 
-lapack_ct_src = cxx{main_test}  \
-                ct/lapack/cxx{**}
+dft_ct_src = ct/dft/cxx{**}
+dft_rt_src = rt/dft/cxx{**}
 
-lapack_rt_src = cxx{main_test}  \
-                rt/lapack/cxx{**}
+rng_ct_src = ct/rng/cxx{**}
+rng_rt_src = rt/rng/cxx{**}
+
+sparse_blas_ct_src = ct/sparse_blas/cxx{**}
+sparse_blas_rt_src = rt/sparse_blas/cxx{**}
 
 ./: exe{test_main_blas_rt}: include = $blas
 ./: exe{test_main_blas_ct}: include = $blas
 ./: exe{test_main_lapack_rt}: include = $lapack
 ./: exe{test_main_lapack_ct}: include = $lapack
+./: exe{test_main_dft_rt}: include = $dft
+./: exe{test_main_dft_ct}: include = $dft
+./: exe{test_main_rng_rt}: include = $rng
+./: exe{test_main_rng_ct}: include = $rng
 
-exe{test_main_blas_rt}: testscript
-exe{test_main_blas_ct}: testscript
-exe{test_main_lapack_rt}: testscript
-exe{test_main_lapack_ct}: testscript
-
-for t: $blas_rt_src
+# See README-DEV for explanation why these are disabled (they crash, in the
+# upstream build too.)
+#
+./: exe{test_main_sparse_blas_rt}:
 {
-  n = $name($t)
-  d = $directory($t)
-
-  exe{test_main_blas_rt}: $d/obje{$(n)_host.exe.o}
+  include = $sparse
+  test = false
 }
 
-for t: $blas_ct_src
+./: exe{test_main_sparse_blas_ct}:
 {
-  n = $name($t)
-  d = $directory($t)
-
-  exe{test_main_blas_ct}: $d/obje{$(n)_host.exe.o}
+  include = $sparse
+  test = false
 }
 
-for t: $lapack_rt_src
+# Dependencies of the test executables on their SYCL host objects (see
+# sycl_compilation.build) and private headers.
+#
+for sd: blas lapack dft rng sparse_blas # sd: SYCL domain
 {
-  n = $name($t)
-  d = $directory($t)
+  # Run time tests executable
+  #
+  for t: $($(sd)_rt_src)
+  {
+    n = $name($t)
+    d = $directory($t)
 
-  exe{test_main_lapack_rt}: $d/obje{$(n)_host.exe.o}
-}
+    exe{test_main_$(sd)_rt}: $d/obje{$(n)_host.exe.o}
+  }
 
-for t: $lapack_ct_src
-{
-  n = $name($t)
-  d = $directory($t)
+  # Compile time tests executable
+  #
+  for t: $($(sd)_ct_src)
+  {
+    n = $name($t)
+    d = $directory($t)
 
-  exe{test_main_lapack_ct}: $d/obje{$(n)_host.exe.o}
+    exe{test_main_$(sd)_ct}: $d/obje{$(n)_host.exe.o}
+  }
+
+  exe{test_main_$(sd)_ct}: ct/$(sd)/hxx{include/** **/include/**}
+  exe{test_main_$(sd)_rt}: rt/$(sd)/hxx{include/** **/include/**}
+
+  exe{test_main_$(sd)_rt \
+      test_main_$(sd)_ct}: include/hxx{**} testscript
 }
 
 # Build options
-#
-obje{*}                 \
-rt/blas/obje{*}         \
-ct/blas/obje{*}         \
-rt/lapack/obje{*}       \
-ct/lapack/obje{*}:      \
-  cxx.poptions += "-I$src_base/include"
-
-rt/obje{*}: cxx.poptions += -DCALL_RT_API
 
 # Set up the reference BLAS implementation.
+#
+# @@ I would recommend using the reference BLAS mentioned in the oneMath
+#    documentation at
+#    https://uxlfoundation.github.io/oneMath/building_and_running_tests.html
 #
 ref_blas_incdir = $config.liboneMath_tests.reference_blas_incdir
 ref_blas_libdir = $config.liboneMath_tests.reference_blas_libdir
 
-rt/blas/obje{*} ct/blas/obje{*} rt/lapack/obje{*} ct/lapack/obje{*}:    \
-  cxx.poptions += "-I$ref_blas_incdir"
+rt/blas/obje{*}         \
+ct/blas/obje{*}         \
+rt/lapack/obje{*}       \
+ct/lapack/obje{*}       \
+rt/dft/obje{*}          \
+ct/dft/obje{*}          \
+rt/sparse_blas/obje{*}  \
+ct/sparse_blas/obje{*}: \
+  cxx.poptions += "-I$src_base/include" "-I$ref_blas_incdir"
 
-rt/blas/obje{*} ct/blas/obje{*}:                                                \
+obje{*}: cxx.poptions += "-I$src_base/include"
+
+# Note: it's important to get the following just right to ensure
+# rng/device/skip_ahead.cpp includes rng/device/include/skip_ahead_test.hpp
+# instead of rng/include/skip_ahead_test.hpp (no prefixes are used, just
+# `#include "skip_ahead_test.hpp"`).
+#
+rt/rng/device/obje{*} \
+ct/rng/device/obje{*}:           cxx.poptions += "-I$src_base/include"
+
+rt/rng/service/obje{*} \
+ct/rng/service/obje{*}:          cxx.poptions += "-I$src_base/../include"
+
+rt/rng/statistics_check/obje{*} \
+ct/rng/statistics_check/obje{*}: cxx.poptions += "-I$src_base/../include"
+
+rt/obje{*}: cxx.poptions += -DCALL_RT_API
+
+rt/blas/obje{*}        ct/blas/obje{*}                                          \
+rt/sparse_blas/obje{*} ct/sparse_blas/obje{*}:                                  \
    cxx.poptions += -DONEMATH_REF_BLAS_LIBNAME="\"$ref_blas_libdir/libblas.so\"" \
                    -DONEMATH_REF_CBLAS_LIBNAME="\"$ref_blas_libdir/libcblas.so\""
 
-sycl_exe_src = $blas_rt_src $blas_ct_src \
-               $lapack_rt_src $lapack_ct_src
+sycl_exe_src = $blas_rt_src        $blas_ct_src         \
+               $lapack_rt_src      $lapack_ct_src       \
+               $dft_rt_src         $dft_ct_src          \
+               $rng_rt_src         $rng_ct_src          \
+               $sparse_blas_rt_src $sparse_blas_ct_src  \
+               cxx{main_test}
 import [once] liboneMath%buildfile{sycl_compilation}
 
-# Libraries
+# Libraries and link options.
 #
-for t: $blas_rt_src
+for sd: blas lapack dft rng sparse_blas
 {
-  n = $name($t)
-  d = $directory($t)
+  for t: $($(sd)_rt_src)
+  {
+    n = $name($t)
+    d = $directory($t)
 
-  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
+    all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
 
-  $d/obje{$all_obj}: $onemath $gtest
+    $d/obje{$all_obj}: $onemath $gtest
+  }
+
+  for t: $($(sd)_ct_src)
+  {
+    n = $name($t)
+    d = $directory($t)
+
+    all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
+
+    $d/obje{$all_obj}: $gtest
+    $d/obje{$all_obj}: $($(sd)_mklcpu): include = $mklcpu
+    $d/obje{$all_obj}: $($(sd)_mklgpu): include = $mklgpu
+  }
+
+  obje{main_test_device.exe.o}: $onemath $gtest
+  obje{main_test_device_offload.exe.o}: $onemath $gtest
+  obje{main_test_host.exe.o}: $onemath $gtest
+
+  exe{test_main_$(sd)_rt}: obje{main_test_host.exe.o} $onemath $gtest
+  exe{test_main_$(sd)_ct}: obje{main_test_host.exe.o} $gtest
+  exe{test_main_$(sd)_ct}: $($(sd)_mklcpu): include = $mklcpu
+  exe{test_main_$(sd)_ct}: $($(sd)_mklgpu): include = $mklgpu
+
+  exe{test_main_$(sd)_rt \
+      test_main_$(sd)_ct}: cxx.loptions += $cxx_loptions
 }
-
-for t: $blas_ct_src
-{
-  n = $name($t)
-  d = $directory($t)
-
-  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
-
-  $d/obje{$all_obj}: $gtest
-  $d/obje{$all_obj}: $blas_mklcpu: include = $mklcpu
-}
-
-for t: $lapack_rt_src
-{
-  n = $name($t)
-  d = $directory($t)
-
-  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
-
-  $d/obje{$all_obj}: $onemath $gtest
-}
-
-for t: $lapack_ct_src
-{
-  n = $name($t)
-  d = $directory($t)
-
-  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
-
-  $d/obje{$all_obj}: $gtest
-  $d/obje{$all_obj}: $lapack_mklcpu: include = $mklcpu
-}
-
-exe{test_main_blas_rt}: $onemath $gtest
-
-exe{test_main_blas_ct}: $gtest
-exe{test_main_blas_ct}: $blas_mklcpu: include = $mklcpu
-
-exe{test_main_lapack_rt}: $onemath $gtest
-
-exe{test_main_lapack_ct}: $gtest
-exe{test_main_lapack_ct}: $lapack_mklcpu: include = $mklcpu
 
 exe{test_main_lapack_rt                                                 \
     test_main_lapack_ct}: cxx.libs += $ref_blas_libdir/liblapacke64.so  \
