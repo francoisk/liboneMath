@@ -166,4 +166,4 @@ using ComplexDoublePrecisionUsm = std::complex<double>;
         test_log::padding = "[          ] ";                                                      \
         EXPECT_TRUE(                                                                              \
             dependency_controller.run(::usm_dependency<ComplexDoublePrecisionUsm>, *GetParam())); \
-    }\
+    }
