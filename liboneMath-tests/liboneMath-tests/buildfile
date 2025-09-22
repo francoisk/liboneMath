@@ -1,10 +1,13 @@
-import onemath     = liboneMath%lib{onemath}
-import blas_mklcpu = liboneMath%lib{onemath_blas_mklcpu}
-import gtest       = gtest%liba{gtest}
+import onemath       = liboneMath%lib{onemath}
+import blas_mklcpu   = liboneMath%lib{onemath_blas_mklcpu}
+import lapack_mklcpu = liboneMath%lib{onemath_lapack_mklcpu}
+import gtest         = gtest%liba{gtest}
+import gtest_main    = gtest%liba{gtest_main}
 
 import! clang_offload_packager = icpx%exe{clang-offload-packager}
 
 blas   = $($onemath: libonemath.enable_blas)
+lapack = $($onemath: libonemath.enable_lapack)
 mklcpu = $($onemath: libonemath.enable_mklcpu_backend)
 
 ld_library_path = "$($onemath: out_root)/src/:$getenv(LD_LIBRARY_PATH)"
@@ -13,13 +16,23 @@ blas_rt_src = cxx{main_test}    \
               rt/blas/cxx{**}
 
 blas_ct_src = cxx{main_test}    \
-              ct/cxx{**}
+              ct/blas/cxx{**}
+
+lapack_ct_src = cxx{main_test}  \
+                ct/lapack/cxx{**}
+
+lapack_rt_src = cxx{main_test}  \
+                rt/lapack/cxx{**}
 
 ./: exe{test_main_blas_rt}: include = $blas
 ./: exe{test_main_blas_ct}: include = $blas
+./: exe{test_main_lapack_rt}: include = $lapack
+./: exe{test_main_lapack_ct}: include = $lapack
 
 exe{test_main_blas_rt}: testscript
 exe{test_main_blas_ct}: testscript
+exe{test_main_lapack_rt}: testscript
+exe{test_main_lapack_ct}: testscript
 
 for t: $blas_rt_src
 {
@@ -37,11 +50,30 @@ for t: $blas_ct_src
   exe{test_main_blas_ct}: $d/obje{$(n)_host.exe.o}
 }
 
+for t: $lapack_rt_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  exe{test_main_lapack_rt}: $d/obje{$(n)_host.exe.o}
+}
+
+for t: $lapack_ct_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  exe{test_main_lapack_ct}: $d/obje{$(n)_host.exe.o}
+}
+
 # Build options
 #
-obje{*}         \
-rt/blas/obje{*} \
-ct/blas/obje{*}: cxx.poptions += "-I$src_base/include"
+obje{*}                 \
+rt/blas/obje{*}         \
+ct/blas/obje{*}         \
+rt/lapack/obje{*}       \
+ct/lapack/obje{*}:      \
+  cxx.poptions += "-I$src_base/include"
 
 rt/obje{*}: cxx.poptions += -DCALL_RT_API
 
@@ -50,12 +82,15 @@ rt/obje{*}: cxx.poptions += -DCALL_RT_API
 ref_blas_incdir = $config.liboneMath_tests.reference_blas_incdir
 ref_blas_libdir = $config.liboneMath_tests.reference_blas_libdir
 
-obje{*}: cxx.poptions +=                                        \
-  "-I$ref_blas_incdir"                                          \
-  -DONEMATH_REF_BLAS_LIBNAME="\"$ref_blas_libdir/libblas.so\""  \
-  -DONEMATH_REF_CBLAS_LIBNAME="\"$ref_blas_libdir/libcblas.so\""
+rt/blas/obje{*} ct/blas/obje{*} rt/lapack/obje{*} ct/lapack/obje{*}:    \
+  cxx.poptions += "-I$ref_blas_incdir"
 
-sycl_exe_src = $blas_rt_src $blas_ct_src
+rt/blas/obje{*} ct/blas/obje{*}:                                                \
+   cxx.poptions += -DONEMATH_REF_BLAS_LIBNAME="\"$ref_blas_libdir/libblas.so\"" \
+                   -DONEMATH_REF_CBLAS_LIBNAME="\"$ref_blas_libdir/libcblas.so\""
+
+sycl_exe_src = $blas_rt_src $blas_ct_src \
+               $lapack_rt_src $lapack_ct_src
 import [once] liboneMath%buildfile{sycl_compilation}
 
 # Libraries
@@ -81,7 +116,39 @@ for t: $blas_ct_src
   $d/obje{$all_obj}: $blas_mklcpu: include = $mklcpu
 }
 
+for t: $lapack_rt_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
+
+  $d/obje{$all_obj}: $onemath $gtest
+}
+
+for t: $lapack_ct_src
+{
+  n = $name($t)
+  d = $directory($t)
+
+  all_obj = $(n)_host.exe.o $(n)_device.exe.o $(n)_device_offload.exe.o
+
+  $d/obje{$all_obj}: $gtest
+  $d/obje{$all_obj}: $lapack_mklcpu: include = $mklcpu
+}
+
 exe{test_main_blas_rt}: $onemath $gtest
 
 exe{test_main_blas_ct}: $gtest
 exe{test_main_blas_ct}: $blas_mklcpu: include = $mklcpu
+
+exe{test_main_lapack_rt}: $onemath $gtest
+
+exe{test_main_lapack_ct}: $gtest
+exe{test_main_lapack_ct}: $lapack_mklcpu: include = $mklcpu
+
+exe{test_main_lapack_rt                                                 \
+    test_main_lapack_ct}: cxx.libs += $ref_blas_libdir/liblapacke64.so  \
+                                      $ref_blas_libdir/liblapack64.so   \
+                                      $ref_blas_libdir/libcblas64.so    \
+                                      $ref_blas_libdir/libblas64.so
