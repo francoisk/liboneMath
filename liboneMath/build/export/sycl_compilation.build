@@ -12,7 +12,7 @@
 # Thus we separate compilation into device- and host-only stages.
 #
 # The device-only stage compiles only the SYCL kernel function(s) (and the
-# functions they call, AKA `device functions`) into SPIR64 format, which is an
+# functions they call, AKA `device functions`) into SPIR64 format, an
 # intermediate representation which is compiled just-in-time by the SYCL
 # runtime for the device the code is about to be offloaded to. This output
 # file is called the device image in SYCL terminology. SPIR64 is the default
@@ -27,15 +27,24 @@
 # -fembed-offload-object oneAPI DPC++ compiler option. This object is then
 # linked into the library or executable binary.
 #
-# Note that `icpx -fsycl -fsycl-offload-new-driver -c foo.cpp` actually
-# performs these same steps underneath; see below.
+# (Note that while most users would compile each source file only once, that
+# single icpx invocation (e.g., `icpx -fsycl --offload-new-driver -c foo.cpp`)
+# is actually composed of multiple compilation steps that are very similar to
+# what we do explicitly here. This can be observed by passing -# and perhaps
+# -save-temps to icpx.)
+#
+#   @@ UPDATE: Passing the --offload-new-driver option appears to solve the
+#      icpx "redefinition" failure which leaves only the build2 make-format
+#      depenency output issue. So theoretically a relatively minor
+#      modification to build2 would make single-pass compilation possible in
+#      build2.
 #
 # References:
 #
 # https://intel.github.io/llvm/design/OffloadDesign.html
 # https://discourse.llvm.org/t/building-device-ir-and-host-ir-into-an-executable/84384/4
 
-# How to use:
+# How to use this buildfile:
 #
 # - Add all sycl source files to the `sycl_lib_src` and/or `sycl_exe_src`
 #   variables as appropriate. E.g.:
@@ -78,7 +87,8 @@
 #
 
 # Under build2 the desired compilation commands for a source file foo.cpp is
-# as follows:
+# as follows (but simplified for clarity; more details are included in the
+# actual code):
 #
 #   Extract dependencies and compile the device image from foo.cpp. Then
 #   convert it into an offload binary (an object that can be embedded inside
@@ -89,7 +99,7 @@
 #     icpx -fsycl --offload-new-driver -fsycl-device-only
 #          -c foo_device.ii -o foo_device.o
 #     clang-offload-packager -o foo_device_offload.o
-#                            --image=file=foo_device.o,triple=spir64-unknown-unknown
+#                            --image=file=foo_device.o
 #
 #   Extract dependencies and compile the host object, also from foo.cpp. Then
 #   embed the device offload binary inside the host object's offload section.
@@ -103,13 +113,14 @@
 #   Link the library using the various host objects with the device images
 #   embedded in them as input.
 #
-#     icpx -shared -o libonemath.so foo_host.o bar_host.o baz_host.o
+#     icpx -fsycl --offload-new-driver -shared
+#          -o libonemath.so foo_host.o bar_host.o baz_host.o
 #
 # This sequence can be verified by compiling the device and host objects in a
 # single compiler invocation (the default method of operation) with debug
-# output enabled (-###):
+# output enabled (-# or -### and perhaps -save-temps):
 #
-#   icpx -### -fsycl --offload-new-driver -c foo.cpp
+#   icpx -# -fsycl --offload-new-driver -c foo.cpp
 
 # Declare dependencies and coptions for shared and static library objects.
 #
@@ -117,6 +128,34 @@ for t: $sycl_lib_src
 {
   n = $name($t)
   d = $normalize([dir_path] $directory($t))
+
+  # Path to the host compiler integration header. This header is produced by
+  # the device compiler and contains information about the SYCL kernel
+  # functions such as their C++-mangled names and details about their
+  # parameters. This header is included during host compilation and is used to
+  # generate the host code that will extract the SYCL kernel functions from
+  # the embedded device code and send them to the device(s) during runtime.
+  #
+  # (Note that integration headers are apparently only necessary when unnamed
+  # SYCL kernel functions (C++ lambdas) are being used).
+  #
+  # @@ TODO Track changes on these (ad hoc rule + depdb).
+  #
+  # @@ TODO The integration footer probably needs to be done too. They have
+  #    always been empty in my tests thus far.
+  #
+  int_hdr_so = "$path(./)/$d/$(n)_device-header.so.h"
+  int_hdr_a  = "$path(./)/$d/$(n)_device-header.a.h"
+
+  # Device object (and host integration header).
+  #
+  <$d/objs{$(n)_device.so.o} file{$int_hdr_so}>: $d/cxx{$(n)}
+  <$d/obja{$(n)_device.a.o} file{$int_hdr_a}>:   $d/cxx{$(n)}
+
+  # Device offload object
+  #
+  $d/objs{$(n)_device_offload.so.o}: $d/objs{$(n)_device.so.o}
+  $d/obja{$(n)_device_offload.a.o}:  $d/obja{$(n)_device.a.o}
 
   # Host object
   #
@@ -126,113 +165,123 @@ for t: $sycl_lib_src
   $d/obja{$(n)_host.a.o}: $d/cxx{$(n)}
   $d/obja{$(n)_host.a.o}: $d/obja{$(n)_device_offload.a.o}: include = adhoc
 
-  # Device object
+  # Build options for the device object:
   #
-  $d/objs{$(n)_device.so.o}: $d/cxx{$(n)}
-  $d/obja{$(n)_device.a.o}:  $d/cxx{$(n)}
+  # - Compile for the device only
+  # - Generate a host compiler integration header (to be included during host
+  #   compilation)
+  #
+  $d/objs{$(n)_device.so.o}: cxx.coptions +=    \
+    -fsycl --offload-new-driver                 \
+    -fsycl-device-only                          \
+    -Xclang -fsycl-int-header="$int_hdr_so"
 
-  # Device offload object
-  #
-  $d/objs{$(n)_device_offload.so.o}: $d/objs{$(n)_device.so.o}
-  $d/obja{$(n)_device_offload.a.o}:  $d/obja{$(n)_device.a.o}
+  $d/obja{$(n)_device.a.o}:  cxx.coptions +=    \
+    -fsycl --offload-new-driver                 \
+    -fsycl-device-only                          \
+    -Xclang -fsycl-int-header="$int_hdr_a"
 
   # Build options for the host object:
   #
   # - Compile for host only
   # - Embed the device offload object inside the host object
+  # - Include the integration header generated during device object compilation
   #
-  $d/objs{$(n)_host.so.o}: cxx.coptions +=      \
-    -fsycl --offload-new-driver                 \
-    -fsycl-host-only                            \
-    -Xclang -fembed-offload-object="$path(./)/$d/$(n)_device_offload.so.o"
+  $d/objs{$(n)_host.so.o}: cxx.coptions +=                                      \
+    -fsycl --offload-new-driver                                                 \
+    -fsycl-host-only                                                            \
+    -Xclang -fembed-offload-object="$path(./)/$d/$(n)_device_offload.so.o"      \
+    -Xclang -include-internal-header -Xclang "$int_hdr_so"
 
-  $d/obja{$(n)_host.a.o}: cxx.coptions +=       \
-    -fsycl --offload-new-driver                 \
-    -fsycl-host-only                            \
-    -Xclang -fembed-offload-object="$path(./)/$d/$(n)_device_offload.a.o"
+  $d/obja{$(n)_host.a.o}: cxx.coptions +=                                       \
+    -fsycl --offload-new-driver                                                 \
+    -fsycl-host-only                                                            \
+    -Xclang -fembed-offload-object="$path(./)/$d/$(n)_device_offload.a.o"       \
+    -Xclang -include-internal-header -Xclang "$int_hdr_a"
 
-  # Build options for the device object:
+  # We have to reprocess the host object (i.e., compile from the cxx{} instead
+  # of the .ii preprocessed output) otherwise the contents of the integration
+  # header will be included twice (once during preprocessing and once during
+  # compilation; there are no header guards).
   #
-  # - Compile for the device only
-  #
-  $d/objs{$(n)_device.so.o}: cxx.coptions += -fsycl --offload-new-driver        \
-                                             -fsycl-device-only
-  $d/obja{$(n)_device.a.o}:  cxx.coptions += -fsycl --offload-new-driver        \
-                                             -fsycl-device-only
+  $d/objs{$(n)_host.so.o}: cc.reprocess = true
+  $d/obja{$(n)_host.a.o}:  cc.reprocess = true
 }
 
 # Declare dependencies and coptions for executable objects.
+#
+# Note: See the library section above for more information.
 #
 for t: $sycl_exe_src
 {
   n = $name($t)
   d = $normalize([dir_path] $directory($t))
 
-  # Host object
-  #
-  $d/obje{$(n)_host.exe.o}: $d/cxx{$(n)}
-  $d/obje{$(n)_host.exe.o}: $d/obje{$(n)_device_offload.exe.o}: include = adhoc
+  int_hdr = "$path(./)/$d/$(n)_device-header.exe.h"
 
-  # Device object
+  # Device object (and host integration header).
   #
-  $d/obje{$(n)_device.exe.o}: $d/cxx{$(n)}
+  <$d/obje{$(n)_device.exe.o} file{$int_hdr}>: $d/cxx{$(n)}
 
   # Device offload object
   #
   $d/obje{$(n)_device_offload.exe.o}: $d/obje{$(n)_device.exe.o}
 
-  # Build options for the host object:
+  # Host object
   #
-  # - Compile for host only
-  # - Embed the device offload object inside the host object
-  #
-  $d/obje{$(n)_host.exe.o}: cxx.coptions +=     \
-    -fsycl --offload-new-driver                 \
-    -fsycl-host-only                            \
-    -Xclang -fembed-offload-object="$path(./)/$d/$(n)_device_offload.exe.o"
+  $d/obje{$(n)_host.exe.o}: $d/cxx{$(n)}
+  $d/obje{$(n)_host.exe.o}: $d/obje{$(n)_device_offload.exe.o}: include = adhoc
 
-  # Build options for the device object:
+  # Build options
   #
-  # - Compile for the device only
-  #
-  $d/obje{$(n)_device.exe.o}: cxx.coptions += -fsycl --offload-new-driver       \
-                                              -fsycl-device-only
+  $d/obje{$(n)_device.exe.o}: cxx.coptions +=   \
+    -fsycl --offload-new-driver                 \
+    -fsycl-device-only                          \
+    -Xclang -fsycl-int-header="$int_hdr"
+
+  $d/obje{$(n)_host.exe.o}: cxx.coptions +=                                     \
+    -fsycl --offload-new-driver                                                 \
+    -fsycl-host-only                                                            \
+    -Xclang -fembed-offload-object="$path(./)/$d/$(n)_device_offload.exe.o"     \
+    -Xclang -include-internal-header -Xclang "$int_hdr"
+
+  $d/obje{$(n)_host.exe.o}: cc.reprocess = true
 }
 
 # Generate the device offload object using the clang-offload-packager tool.
 #
-# spir64-unknown-unknown: From the `icpx -### -fsycl -fsycl-device-only
-#                         foo.cpp` output.
+# Key-value arguments for the --image clang-offload-packager option. Taken
+# from the output of `icpx -# -fsycl -fsycl-device-only foo.cpp`.
 #
+offload_img_kvs = triple=spir64-unknown-unknown,arch=generic,kind=sycl
+
 objs{~'/(.*)_offload.so/'}: objs{~'/\1.so/'}
 {{
   diag clang-offload-packager $path($<[0]) -> $path($>[0])
 
-  $clang_offload_packager \
-  -o $path($>[0]) --image=file="$path($<[0])",triple=spir64-unknown-unknown
+  $clang_offload_packager -o $path($>[0]) \
+                          --image=file="$path($<[0])",$offload_img_kvs
 }}
 
 obja{~'/(.*)_offload.a/'}: obja{~'/\1.a/'}
 {{
   diag clang-offload-packager $path($<[0]) -> $path($>[0])
 
-  $clang_offload_packager \
-  -o $path($>[0]) --image=file="$path($<[0])",triple=spir64-unknown-unknown
+  $clang_offload_packager -o $path($>[0]) \
+                          --image=file="$path($<[0])",$offload_img_kvs
 }}
 
 obje{~'/(.*)_offload.exe/'}: obje{~'/\1.exe/'}
 {{
   diag clang-offload-packager $path($<[0]) -> $path($>[0])
 
-  $clang_offload_packager \
-  -o $path($>[0]) --image=file="$path($<[0])",triple=spir64-unknown-unknown
+  $clang_offload_packager -o $path($>[0]) \
+                          --image=file="$path($<[0])",$offload_img_kvs
 }}
 
 # Link options
 #
-cxx.loptions += -fsycl
-
-if ($cxx.target.class == 'windows')
-  cxx.loptions += -fsycl-device-code-split:per_kernel
-else
-  cxx.loptions += -fsycl-device-code-split=per_kernel
+# Note that upstream passes -fsycl-device-code-split:per_kernel when linking
+# their test applications but it makes linking and test runtime super slow.
+#
+cxx.loptions += -fsycl --offload-new-driver
