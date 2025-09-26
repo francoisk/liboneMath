@@ -1,0 +1,190 @@
+# TODO (things that have not been completed in this build2 package)
+
+  (Also see `@@`-tagged comments in the source code. E.g. `@@ TODO ...`)
+
+- Current package state overview: All domain libraries for the oneMKL CPU
+  (mklcpu) backend build and most of the upstream tests pass but with some
+  exceptions (see below). The buildfiles could use some cleaning up and/or
+  restructuring. Distribution works and installation probably works (I have
+  not tested installation but the headers do get installed to the right
+  places).
+
+  This package uses an unusual compilation model. See sycl_compilation.build
+  for details.
+
+- This package needs the Intel oneMKL libraries and the Intel oneAPI DPC++/C++
+  compiler (icpx) installed, and the setvars script to be run to set up
+  various environment variables.
+
+  Ultimately this should all be provided by a oneMKL build2 package.
+
+  See mkl.build.
+
+- Upstream test runtime anomalies
+
+  A few tests still fail and the RNG ones are super slow. See the `Upstream
+  tests` section below for details.
+
+- Only the MKLCPU backend is currently supported. Next would probably be
+  MKLGPU.
+
+- Confirm installation works (see liboneMath/src/buildfile for details).
+
+  (Distribution does work.)
+
+- Add Windows support
+
+- Device objects are compiled during match which is not ideal.
+
+- Package structure (manifest, READMEs, licences, etc.) is incomplete.
+
+- Allow upstream tests to print output (based on gtest and there are hundreds
+  of test cases).
+
+- Add basic integration test to package liboneMath to make it testable without
+  the liboneMath-tests package (as per packaging guide).
+
+# Project and toolchain naming and terminology
+
+  (Links to all of these projects can be found in the oneMath repository on
+  GitHub.)
+
+  - oneAPI: An open, free, and standards-based programming system that
+    provides portability and performance across accelerators and generations
+    of hardware. oneMath is just one of its components (the others being
+    oneDPL, oneDNN, oneCCL, oneDAL, and oneTBB).
+
+  - oneMath: An open-source implementation of the oneAPI/oneMath
+    specification. It is this build2 project's upstream.
+
+  - oneMKL (Intel oneMKL): One of the backends supported by oneMath; primarily
+    used for Intel CPUs and GPUs.
+
+  - oneAPI DPC++/C++ compiler: The open source (Intel) project upon which the
+    Intel oneAPI DPC++/C++ (SYCL) compiler is based. It is based on clang but
+    is quite different in many respects. Referred to as "Open DPC++" by
+    oneMath.
+
+  - Intel oneAPI DPC++/C++ compiler (icpx): Intel's proprietary SYCL
+    compiler. Based on the oneAPI DPC++/C++ compiler mentioned above. This is
+    the only compiler this build2 project has been tested with. Referred to as
+    "Intel DPC++" by oneMath.
+
+# Setting up oneMKL and the Intel oneAPI DPC++/C++ compiler (icpx)
+
+  - Installation: On Linux, set up the apt repository as per the Intel oneMKL
+    website. Then install the intel-oneapi-mkl-devel-2025.2 and
+    intel-oneapi-compiler-dpcpp-cpp-2025.2 packages. Those should be the only
+    ones required.
+
+  - Run the oneMKL `setvars.sh` script (sets various environment variables).
+
+  - Add the icpx compiler tools to the PATH:
+
+    export PATH=/opt/intel/oneapi/compiler/2025.2/bin/compiler/:$PATH
+
+    This is for clang-offload-packager (see sycl_compilation.build).
+
+  Verify everything worked by running `icpx --help`.
+
+# Upstream build: configuring
+
+   cmake -DREF_BLAS_ROOT=<refblas_root> \
+         -DREF_LAPACK_ROOT=<refblas_root> \
+         -DBUILD_EXAMPLES=off \
+         -DBUILD_FUNCTIONAL_TESTS=on \
+         -DCMAKE_BUILD_TYPE=debug \
+         -DCMAKE_VERBOSE_MAKEFILE=on -DCMAKE_COLOR_MAKEFILE=off \
+         <oneMath-src-dir>
+
+  Where <refblas_root> is the parent directory of `include` and `lib`
+  directories containing the reference BLAS and LAPACK libraries used to
+  verify the oneMath tests' own answers. I would recommend installing the
+  reference BLAS/LAPACK mentioned in
+  https://uxlfoundation.github.io/oneMath/building_and_running_tests.html.
+
+# Creating a build2 configuration
+
+  bdep init -C @cfg cc -- \
+    config.cxx='/opt/intel/oneapi/compiler/2025.2/bin/icpx' \
+    config.cxx.id=clang \
+    config.c='/opt/intel/oneapi/compiler/2025.2/bin/icx' \
+    config.c.id=clang \
+    config.liboneMath_tests.reference_blas_incdir=<refblas_root>/include \
+    config.liboneMath_tests.reference_blas_libdir=<refblas_root>/lib \
+    config.liboneMath.enable_mklcpu_backend=true
+
+  See the Upstream build section above RE the reference BLAS/LAPACK root
+  directory.
+
+# Links
+
+- SYCL specification:
+  https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html
+
+I would recommend downloading the PDF versions of the documentation of the
+Intel oneAPI products below because the website for the latests oneMKL
+documentation is quite broken currently (version 2025.2).
+
+- SYCL 101:
+  https://www.intel.com/content/www/us/en/docs/sycl/introduction/latest/overview.html
+
+- Intel oneAPI DPC++/C++ compiler:
+  https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html
+
+- Intel oneMKL:
+  https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html
+
+- Get started with Intel oneMKL:
+  https://www.intel.com/content/www/us/en/docs/onemkl/get-started-guide/2025-2/overview.html
+
+- oneMKL developer guide (Linux):
+  https://www.intel.com/content/www/us/en/docs/onemkl/developer-guide-linux/2025-2/overview.html
+
+# Upstream tests
+
+## test_main_blas_{ct,rt}
+
+I get 3 failures in test_main_blas_{ct,rt}. But if I run each of them
+individually, they succeed. This suggests a problem in the upstream test code.
+
+## test_main_sparse_blas{ct,rt}
+
+These fail undeterministically (segfaults, invalid pointers, or just lots of
+test failures until one of the former occurs). But the same goes for these
+tests in the upstream build. So again, seems like a problem in the upstream
+code.
+
+## test_main_rng_{ct,rt}
+
+They visibly run at a different pace than the upstream tests. The biggest and
+most apparent problem is that the following two tests are much slower
+downstream (30s vs. 200ms):
+
+Philox4x32x10UniformStdDeviceMomentsTestsSuite/Philox4x32x10UniformStdDeviceMomentsTests.RealSinglePrecision/Intel_R__Core_TM__Ultra_7_265K
+Philox4x32x10UniformStdDeviceMomentsTestsSuite/Philox4x32x10UniformStdDeviceMomentsTests.RealDoublePrecision/Intel_R__Core_TM__Ultra_7_265K
+
+But then some of our tests run much faster (0ms vs. non-zero (10, 20...)  ms
+upstream.
+
+Obviously seems like something serious is wrong. Did not have time to get to
+the bottom of it but it seems like differences in SYCL scheduling/offloading
+and/or concurrency.
+
+Oddly, adding -g makes our tests much faster, but still slower than
+upstream. I did also try the same flags they use for release builds (-O3
+-DNDEBUG).
+
+Some LLMs said -fsycl-device-code-split=per_kernel which upstream uses might
+be the key difference but it makes the link take much longer and made tests
+run much slower but I don't think I ever tried this flag on the RNG tests so
+this needs to be tried, if only on the RNG tests.
+
+Our compilation and link flags and the linked libraries are pretty much
+identical to upstream (and I tried all variations of -O2 and -O3 with
+-DNDEBUG) except for the things in sycl_compilation.build, so the latter
+probably the first thing to look into. See the comments in that file for
+details.
+
+Disabling MKLGPU in the upstream build did not make their tests slower so the
+problem is not that we don't have GPU support enabled downstream yet.
