@@ -1,11 +1,14 @@
-pub_hdrs = {hxx ixx txx}{**}
+# Note that upstream uses both .hpp and .hxx as extension.
+#
+pub_hdrs = {hxx ixx txx}{**} \
+           hxx{**.hxx}
 
 ./: $pub_hdrs
 
 # Install into the oneapi/ subdirectory of, say, /usr/include/
 # recreating subdirectories.
 #
-{hxx ixx txx}{*}:
+{hxx ixx txx}{*} hxx{*.hxx}:
 {
   install         = include/oneapi/
   install.subdirs = true

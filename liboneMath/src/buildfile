@@ -1,7 +1,3 @@
-#intf_libs = # Interface dependencies.
-#impl_libs = # Implementation dependencies.
-#import xxxx_libs += libhello%lib{hello}
-
 import! clang_offload_packager = icpx%exe{clang-offload-packager}
 
 using autoconf
@@ -14,8 +10,9 @@ include $pub
 
 pub_hdrs = $($pub/ pub_hdrs)
 
-supported_backends = mklcpu \
-                     mklgpu
+# @@ TODO mklgpu, rocblas, ...
+#
+supported_backends = mklcpu
 
 # Fail if no supported backends are enabled.
 #
@@ -35,21 +32,30 @@ if ($build.mode != 'skeleton')
     text "enabled backends:" $backends
 }
 
-all_libs = onemath                      \
-           onemath_blas_mklcpu          \
-           onemath_blas_mklgpu          \
-           onemath_lapack_mklcpu        \
-           onemath_lapack_mklgpu        \
-           onemath_dft_mklcpu           \
-           onemath_rng_mklcpu
+all_backend_libs = onemath_blas_mklcpu          \
+                   onemath_lapack_mklcpu        \
+                   onemath_dft_mklcpu           \
+                   onemath_rng_mklcpu           \
+                   onemath_sparse_blas_mklcpu
 
-./: lib{onemath}:             include = true
-./: lib{onemath_blas_mklcpu}: include = $config.liboneMath.enable_mklcpu_backend
-./: lib{onemath_blas_mklgpu}: include = $config.liboneMath.enable_mklgpu_backend
+all_libs = onemath $all_backend_libs
+
+# @@ TODO Having all libraries in one buildfile will probably become a problem
+#    as more backends are added.
+
+# The runtime dispatch library. It dlopen's the backend libraries as
+# appropriate. Useful because otherwise client code needs to be linked against
+# specific backend libraries (e.g. libonemath_blas_mklgpu).
+#
+./: lib{onemath}: include = true
+
+# The Intel oneMKL CPU backend libraries (for compile-time dispatch).
+#
+./: lib{onemath_blas_mklcpu}:   include = $config.liboneMath.enable_mklcpu_backend
 ./: lib{onemath_lapack_mklcpu}: include = $config.liboneMath.enable_mklcpu_backend
-./: lib{onemath_lapack_mklgpu}: include = $config.liboneMath.enable_mklgpu_backend
 ./: lib{onemath_dft_mklcpu}:    include = $config.liboneMath.enable_mklcpu_backend
 ./: lib{onemath_rng_mklcpu}:    include = $config.liboneMath.enable_mklcpu_backend
+./: lib{onemath_sparse_blas_mklcpu}: include = $config.liboneMath.enable_mklcpu_backend
 
 # Public headers.
 #
@@ -104,6 +110,11 @@ lib{onemath}:
   #
   libonemath.enable_rng = ($config.liboneMath.enable_mklcpu_backend || \
                            $config.liboneMath.enable_mklgpu_backend)
+
+  # True if the sparse BLAS domain is enabled.
+  #
+  libonemath.enable_sparse = ($config.liboneMath.enable_mklcpu_backend || \
+                              $config.liboneMath.enable_mklgpu_backend)
 }
 
 # Generate config.hpp.
@@ -142,7 +153,59 @@ oneapi/math/detail/hxx{config}: in{config}
   ONEMATH_BUILD_SHARED_LIBS = true
 }
 
-# Private headers and sources as well as dependencies.
+# Private headers and included source files.
+#
+# Note that upstream uses a different extension for included source files
+# (.cxx, as opposed to .cpp for compiled ones).
+#
+lib{onemath}: include/hxx{*}                            \
+              blas/hxx{*} blas/backends/hxx{*}          \
+              lapack/hxx{*} lapack/backends/hxx{*}      \
+              dft/hxx{*} dft/backends/hxx{*}            \
+              rng/hxx{*} rng/backends/hxx{*}            \
+              sparse_blas/hxx{*} sparse_blas/backends/hxx{*}
+
+lib{onemath_blas_mklcpu}: include/hxx{*}                        \
+                          blas/hxx{*} blas/backends/hxx{*}      \
+                          blas/backends/mkl_common/hxx{**}      \
+                          blas/backends/mklcpu/hxx{**}
+
+lib{onemath_blas_mklcpu}: blas/backends/file{*.cxx}             \
+                          blas/backends/mkl_common/file{**.cxx} \
+                          blas/backends/mklcpu/file{**.cxx}: include = adhoc
+
+lib{onemath_lapack_mklcpu}: include/hxx{*}                              \
+                            lapack/hxx{*} lapack/backends/hxx{*}        \
+                            lapack/backends/mkl_common/hxx{**}          \
+                            lapack/backends/mklcpu*/hxx{**}
+
+lib{onemath_lapack_mklcpu}: lapack/backends/file{*.cxx}                 \
+                            lapack/backends/mkl_common/file{**.cxx}     \
+                            lapack/backends/mklcpu/file{**.cxx}: include = adhoc
+
+lib{onemath_dft_mklcpu}: include/hxx{*}                         \
+                         dft/hxx{*} dft/backends/hxx{*}         \
+                         dft/backends/mklcpu/hxx{**}
+
+lib{onemath_dft_mklcpu}: dft/file{*.cxx} dft/backends/file{*.cxx}       \
+                         dft/backends/mklcpu/file{**.cxx}: include = adhoc
+
+lib{onemath_rng_mklcpu}: include/hxx{*}                         \
+                         rng/hxx{*} rng/backends/hxx{*}         \
+                         rng/backends/mklcpu/hxx{**}
+
+lib{onemath_rng_mklcpu}: rng/backends/file{*.cxx}               \
+                         rng/backends/mklcpu/file{**.cxx}: include = adhoc
+
+lib{onemath_sparse_blas_mklcpu}: include/hxx{*}                                 \
+                                 sparse_blas/hxx{*} sparse_blas/backends/hxx{*} \
+                                 sparse_blas/backends/mkl_common/hxx{**}        \
+                                 sparse_blas/backends/mklcpu/hxx{**}
+
+lib{onemath_sparse_blas_mklcpu}:                \
+  sparse_blas/backends/file{*.cxx}              \
+  sparse_blas/backends/mkl_common/file{**.cxx}  \
+  sparse_blas/backends/mklcpu/file{**.cxx}: include = adhoc
 
 onemath_src = blas/cxx{blas_loader}             \
               dft/backends/cxx{descriptor}      \
@@ -151,27 +214,14 @@ onemath_src = blas/cxx{blas_loader}             \
               rng/cxx{rng_loader}               \
               sparse_blas/cxx{sparse_blas_loader}
 
-blas_mklcpu_src = blas/backends/mklcpu/cxx{mklcpu_batch         \
-                                           mklcpu_extensions    \
-                                           mklcpu_level1        \
-                                           mklcpu_level2        \
-                                           mklcpu_level3        \
-                                           mklcpu_wrappers}
+blas_mklcpu_src   = blas/backends/mklcpu/cxx{*}
+lapack_mklcpu_src = lapack/backends/mklcpu/cxx{*}
+dft_mklcpu_src    = dft/backends/mklcpu/cxx{*}
+rng_mklcpu_src    = rng/backends/mklcpu/cxx{*}
+sparse_blas_mklcpu_src = sparse_blas/backends/mklcpu/cxx{*}
 
-lapack_mklcpu_src = lapack/backends/mklcpu/cxx{lapack_cpu_wrappers} \
-                    lapack/backends/mklcpu/cxx{mkl_lapack}
-
-dft_mklcpu_src = dft/backends/mklcpu/cxx{backward       \
-                                         commit         \
-                                         descriptor     \
-                                         forward        \
-                                         mkl_dft_cpu_wrappers}
-
-rng_mklcpu_src = rng/backends/mklcpu/cxx{mkl_rng_cpu_wrappers   \
-                                         mrg32k3a               \
-                                         philox4x32x10}
-
-# Declare each library's objects as prerequisites.
+# Declare each library's host objects as prerequisites (see
+# sycl_compilation.build for details).
 #
 # p: <library-name>@<sources-variable>
 #
@@ -179,7 +229,8 @@ for p: onemath@onemath_src                      \
        onemath_blas_mklcpu@blas_mklcpu_src      \
        onemath_lapack_mklcpu@lapack_mklcpu_src  \
        onemath_dft_mklcpu@dft_mklcpu_src        \
-       onemath_rng_mklcpu@rng_mklcpu_src
+       onemath_rng_mklcpu@rng_mklcpu_src        \
+       onemath_sparse_blas_mklcpu@sparse_blas_mklcpu_src
 {
   ln = $first($p)  # Library name
   sv = $second($p) # Source files variable name
@@ -202,42 +253,71 @@ out_pfx_src = [dir_path] $out_root/src/
 src_pfx_src = [dir_path] $src_root/src/
 
 cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src"       \
-                "-I$out_pfx_inc" "-I$src_pfx_inc"
-
-# $src_pfx_src/include/: "function_table_initializer.hpp"
-#
-cxx.poptions += "-I$src_pfx_src/include/"
+                "-I$out_pfx_inc" "-I$src_pfx_inc"       \
+                "-I$src_pfx_src/include/"
 
 if ($cxx.target.class == 'windows')
   objs{*}: cxx.poptions += -Donemath_EXPORTS
 
-blas/backends/{objs obja}{*}    \
-lapack/backends/{objs obja}{*}  \
-dft/backends/{objs obja}{*}     \
-rng/backends/{objs obja}{*}: cxx.poptions += $backend_poptions
+for d: blas lapack dft rng sparse_blas
+  $d/backends/{objs obja}{*}: cxx.poptions += $backend_poptions
 
 if ($cxx.class == 'gcc')
 {
   # From upstream/cmake/WarningsUtils.cmake.
   #
-  dft/backends/{objs obja}{*}: cxx.coptions += -Wall -Wextra    \
-                                               -Wshadow -Wconversion -Wpedantic
+          dft/backends/{objs obja}{*}                                   \
+  sparse_blas/backends/{objs obja}{*}: cxx.coptions += -Wall -Wextra    \
+                                                       -Wshadow         \
+                                                       -Wconversion     \
+                                                       -Wpedantic
 }
 
-sycl_lib_src = $onemath_src             \
-               $blas_mklcpu_src         \
-               $lapack_mklcpu_src       \
-               $dft_mklcpu_src          \
-               $rng_mklcpu_src
+# Arrange for all (SYCL) sources to be compiled in two passes (see
+# sycl_compilation.build).
+#
+sycl_lib_src = $onemath_src
+for d: blas lapack dft rng sparse_blas
+{
+  for b: $backends
+    sycl_lib_src += $($(d)_$(b)_src)
+}
 import [once] buildfile{sycl_compilation}
 
 # Libraries
+#
+# Note: have to specify shared and static explicitly to get libraries added
+# after objects (because we work with objs{} and obja{} instead of obj{}).
+#
+{libs liba}{onemath}:               $common_libs
+{libs liba}{onemath_blas_mklcpu}:   $common_libs $mkl_sycl_blas $backend_libs
+{libs liba}{onemath_lapack_mklcpu}: $common_libs $mkl_sycl_lapack $backend_libs
+{libs liba}{onemath_dft_mklcpu}:    $common_libs $mkl_sycl_dft $backend_libs
+# Note: as per upstream, rng_mklcpu's libraries differ from the rest (and even
+# from rng_mklgpu!). It does not link to mkl_sycl_rng or mkl_opencl, and also
+# is the only target that links to libstdc++. Not sure why; seems like a
+# mistake. Might be due to it being the only one that links to the MKL::MKL
+# (non-SYCL) cmake target whereas all of the test link to MKL::MKL_SYCL.
+#
+{libs liba}{onemath_rng_mklcpu}:    $common_libs $mkl_intel_ilp64       \
+                                                 $mkl_tbb_thread        \
+                                                 $mkl_core              \
+                                                 $mkl_tbb
 
-lib{onemath}:               $common_libs
-lib{onemath_blas_mklcpu}:   $common_libs $backend_libs $mkl_sycl_blas
-lib{onemath_lapack_mklcpu}: $common_libs $backend_libs $mkl_sycl_lapack
-lib{onemath_dft_mklcpu}:    $common_libs $backend_libs $mkl_sycl_dft
-lib{onemath_rng_mklcpu}:    $common_libs $backend_libs $mkl_sycl_rng
+{libs liba}{onemath_sparse_blas_mklcpu}: $common_libs           \
+                                         $mkl_sycl_sparse       \
+                                         $backend_libs
+
+lib{$all_libs}: cxx.loptions += $cxx_loptions
+
+if ($cxx.target.class != 'windows')
+{
+  lib{$all_libs}:         cxx.libs += -ldl
+  lib{$all_backend_libs}: cxx.libs += -lm
+}
+
+if ($cxx.target.system != 'win32-msvc')
+  lib{$all_backend_libs}: cxx.libs += -pthread
 
 # Export options.
 #
@@ -246,14 +326,15 @@ incdirs = "-I$out_pfx_inc" "-I$src_pfx_inc"     \
 
 lib{onemath}:
 {
-  cxx.export.poptions = $incdirs $libonemath_export_poptions
-  cxx.export.libs     = $libonemath_export_libs
+  cxx.export.poptions = $incdirs
+  cxx.export.libs     = $common_export_libs
 }
 
-lib{onemath_blas_mklcpu}: cxx.export.poptions = $incdirs
-lib{onemath_lapack_mklcpu}: cxx.export.poptions = $incdirs
-lib{onemath_dft_mklcpu}: cxx.export.poptions = $incdirs
-lib{onemath_rng_mklcpu}: cxx.export.poptions = $incdirs
+lib{$all_backend_libs}:
+{
+  cxx.export.poptions = $incdirs $backend_export_poptions
+  cxx.export.libs     = $common_export_libs $backend_export_libs
+}
 
 # For pre-releases use the complete version to make sure they cannot
 # be used in place of another pre-release or the final version. See
@@ -264,6 +345,10 @@ if $version.pre_release
 else
   lib{$all_libs}: bin.lib.version = "-$version.major.$version.minor"
 
+# @@ TODO Confirm installation works. The headers do seem to get installed
+#    properly (due to the well-structured upstream source directories) but I
+#    have not run the tests against the installed libraries.
+#
 # Don't install private headers.
 #
 {hxx ixx txx}{*}: install = false
