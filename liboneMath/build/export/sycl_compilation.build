@@ -27,11 +27,11 @@
 # -fembed-offload-object oneAPI DPC++ compiler option. This object is then
 # linked into the library or executable binary.
 #
-# (Note that while most users would compile each source file only once, that
-# single icpx invocation (e.g., `icpx -fsycl --offload-new-driver -c foo.cpp`)
-# is actually composed of multiple compilation steps that are very similar to
-# what we do explicitly here. This can be observed by passing -# and perhaps
-# -save-temps to icpx.)
+# (Note that while most other client projects would compile each source file
+# only once, that single icpx invocation (e.g., `icpx -fsycl
+# --offload-new-driver -c foo.cpp`) is actually composed of multiple
+# compilation steps that are very similar to what we do explicitly here. This
+# can be observed by passing -# and perhaps -save-temps to icpx.)
 #
 #   @@ UPDATE: Passing the --offload-new-driver option appears to solve the
 #      icpx "redefinition" failure which leaves only the build2 make-format
@@ -78,6 +78,9 @@
 #
 #   @@ TODO Consider defining a spir64{} target type for the device image.
 #
+#   @@ TODO Should probably use platform-specific extensions for shared/static
+#      object files (as opposed to .so.o/.a.o everywhere).
+#
 # And the following dependencies will be declared:
 #
 #   obj?{foo_host}:           cxx{foo}
@@ -121,6 +124,10 @@
 # output enabled (-# or -### and perhaps -save-temps):
 #
 #   icpx -# -fsycl --offload-new-driver -c foo.cpp
+#
+# (Note that --offload-new-driver is required for -fsycl-device-only and
+# -fsycl-host-only to work. See
+# https://intel.github.io/llvm/design/OffloadDesign.html.)
 
 # Declare dependencies and coptions for shared and static library objects.
 #
@@ -139,10 +146,11 @@ for t: $sycl_lib_src
   # (Note that integration headers are apparently only necessary when unnamed
   # SYCL kernel functions (C++ lambdas) are being used).
   #
-  # @@ TODO Track changes on these (ad hoc rule + depdb).
+  # @@ TODO Track changes on these (ad hoc rule + depdb). Maybe should also
+  #    change the extension to hxx{}?
   #
-  # @@ TODO The integration footer probably needs to be done too. They have
-  #    always been empty in my tests thus far.
+  # @@ TODO The integration footer probably needs to be done too. However they
+  #    have always been empty in my tests thus far.
   #
   int_hdr_so = "$path(./)/$d/$(n)_device-header.so.h"
   int_hdr_a  = "$path(./)/$d/$(n)_device-header.a.h"
@@ -284,4 +292,4 @@ obje{~'/(.*)_offload.exe/'}: obje{~'/\1.exe/'}
 # Note that upstream passes -fsycl-device-code-split:per_kernel when linking
 # their test applications but it makes linking and test runtime super slow.
 #
-cxx.loptions += -fsycl --offload-new-driver
+cxx_loptions = -fsycl --offload-new-driver
