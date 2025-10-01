@@ -1,15 +1,32 @@
+# @@ TMP These imports need the oneMKL setvars script to be run.
+#
 import sycl            = oneMKL%lib{sycl}
 import mkl_core        = oneMKL%lib{mkl_core}
 import mkl_sycl_blas   = oneMKL%lib{mkl_sycl_blas}
 import mkl_sycl_lapack = oneMKL%lib{mkl_sycl_lapack}
+import mkl_sycl_dft    = oneMKL%lib{mkl_sycl_dft}
+import mkl_sycl_rng    = oneMKL%lib{mkl_sycl_rng}
+import mkl_sycl_sparse = oneMKL%lib{mkl_sycl_sparse}
 import mkl_intel_ilp64 = oneMKL%lib{mkl_intel_ilp64}
+
+# We currently only support TBB for threading because oneMKL with SYCL
+# defaults to oneTBB threading. (Other options are sequential, intel_thread
+# (Intel OpenMP), and gnu_thread (GNU OpenMP)).
+#
 import mkl_tbb_thread  = oneMKL%lib{mkl_tbb_thread}
+import mkl_tbb         = oneMKL%lib{tbb}
 
-backend_poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi"
+import mkl_opencl      = oneMKL%lib{OpenCL} # Note: in compiler/lib/
 
+# TODO Ultimately this will be exported by the library targets in the oneMKL
+# package so remove when that package has been created.
+#
 # MKL_ILP64: Define if using the MKL ILP64 (64-bit) libraries.
 #
-backend_poptions += -DMKL_ILP64
+backend_poptions += "-isystem/opt/intel/oneapi/mkl/2025.2/include/oneapi" \
+                    -DMKL_ILP64
+
+backend_export_poptions =
 
 # Note: On my Linux dev machine the MKL setvars script sets the following
 # LD_LIBRARY_PATH:
@@ -21,9 +38,13 @@ backend_poptions += -DMKL_ILP64
 # /opt/intel/oneapi/compiler/2025.2/lib
 #
 
-common_libs += $sycl
+common_libs        += $sycl
+common_export_libs += $sycl
 
-backend_libs += $mkl_core               \
-                $mkl_sycl_blas          \
-                $mkl_intel_ilp64        \
-                $mkl_tbb_thread
+backend_libs += $mkl_intel_ilp64        \
+                $mkl_tbb_thread         \
+                $mkl_core               \
+                $mkl_tbb                \
+                $mkl_opencl
+
+backend_export_libs +=
