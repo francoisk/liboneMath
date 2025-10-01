@@ -2,6 +2,6 @@ project = liboneMath
 
 using version
 using config
-using test
+# using test
 using install
 using dist
