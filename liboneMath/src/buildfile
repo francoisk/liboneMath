@@ -35,29 +35,25 @@ if ($build.mode != 'skeleton')
     text "enabled backends:" $backends
 }
 
-enable_blas = ($config.liboneMath.enable_mklcpu_backend ||      \
-               $config.liboneMath.enable_mklgpu_backend)
-
-enable_lapack = ($config.liboneMath.enable_mklcpu_backend ||    \
-                 $config.liboneMath.enable_mklgpu_backend)
-
 all_libs = onemath                      \
            onemath_blas_mklcpu          \
            onemath_blas_mklgpu          \
            onemath_lapack_mklcpu        \
-           onemath_lapack_mklgpu
+           onemath_lapack_mklgpu        \
+           onemath_dft_mklcpu           \
+           onemath_rng_mklcpu
 
 ./: lib{onemath}:             include = true
 ./: lib{onemath_blas_mklcpu}: include = $config.liboneMath.enable_mklcpu_backend
 ./: lib{onemath_blas_mklgpu}: include = $config.liboneMath.enable_mklgpu_backend
 ./: lib{onemath_lapack_mklcpu}: include = $config.liboneMath.enable_mklcpu_backend
 ./: lib{onemath_lapack_mklgpu}: include = $config.liboneMath.enable_mklgpu_backend
+./: lib{onemath_dft_mklcpu}:    include = $config.liboneMath.enable_mklcpu_backend
+./: lib{onemath_rng_mklcpu}:    include = $config.liboneMath.enable_mklcpu_backend
 
 # Public headers.
 #
-lib{onemath}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
-lib{onemath_blas_mklcpu}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
-lib{onemath_lapack_mklcpu}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
+lib{$all_libs}: $pub/{$pub_hdrs} oneapi/math/detail/hxx{config}
 
 # Metadata.
 #
@@ -91,11 +87,23 @@ lib{onemath}:
 
   # True if the BLAS domain is enabled.
   #
-  libonemath.enable_blas = $enable_blas
+  libonemath.enable_blas = ($config.liboneMath.enable_mklcpu_backend || \
+                            $config.liboneMath.enable_mklgpu_backend)
 
   # True if the LAPACK domain is enabled.
   #
-  libonemath.enable_lapack = $enable_lapack
+  libonemath.enable_lapack = ($config.liboneMath.enable_mklcpu_backend || \
+                              $config.liboneMath.enable_mklgpu_backend)
+
+  # True if the DFT domain is enabled.
+  #
+  libonemath.enable_dft = ($config.liboneMath.enable_mklcpu_backend || \
+                           $config.liboneMath.enable_mklgpu_backend)
+
+  # True if the RNG domain is enabled.
+  #
+  libonemath.enable_rng = ($config.liboneMath.enable_mklcpu_backend || \
+                           $config.liboneMath.enable_mklgpu_backend)
 }
 
 # Generate config.hpp.
@@ -135,7 +143,6 @@ oneapi/math/detail/hxx{config}: in{config}
 }
 
 # Private headers and sources as well as dependencies.
-#
 
 onemath_src = blas/cxx{blas_loader}             \
               dft/backends/cxx{descriptor}      \
@@ -144,43 +151,47 @@ onemath_src = blas/cxx{blas_loader}             \
               rng/cxx{rng_loader}               \
               sparse_blas/cxx{sparse_blas_loader}
 
-blas_mklcpu_src = blas/backends/mklcpu/cxx{mklcpu_batch}        \
-                  blas/backends/mklcpu/cxx{mklcpu_extensions}   \
-                  blas/backends/mklcpu/cxx{mklcpu_level1}       \
-                  blas/backends/mklcpu/cxx{mklcpu_level2}       \
-                  blas/backends/mklcpu/cxx{mklcpu_level3}       \
-                  blas/backends/mklcpu/cxx{mklcpu_wrappers}
+blas_mklcpu_src = blas/backends/mklcpu/cxx{mklcpu_batch         \
+                                           mklcpu_extensions    \
+                                           mklcpu_level1        \
+                                           mklcpu_level2        \
+                                           mklcpu_level3        \
+                                           mklcpu_wrappers}
 
 lapack_mklcpu_src = lapack/backends/mklcpu/cxx{lapack_cpu_wrappers} \
                     lapack/backends/mklcpu/cxx{mkl_lapack}
 
-# @@ TODO Private headers
+dft_mklcpu_src = dft/backends/mklcpu/cxx{backward       \
+                                         commit         \
+                                         descriptor     \
+                                         forward        \
+                                         mkl_dft_cpu_wrappers}
+
+rng_mklcpu_src = rng/backends/mklcpu/cxx{mkl_rng_cpu_wrappers   \
+                                         mrg32k3a               \
+                                         philox4x32x10}
+
+# Declare each library's objects as prerequisites.
 #
-for t: $onemath_src
+# p: <library-name>@<sources-variable>
+#
+for p: onemath@onemath_src                      \
+       onemath_blas_mklcpu@blas_mklcpu_src      \
+       onemath_lapack_mklcpu@lapack_mklcpu_src  \
+       onemath_dft_mklcpu@dft_mklcpu_src        \
+       onemath_rng_mklcpu@rng_mklcpu_src
 {
-  n = $name($t)
-  d = $directory($t)
+  ln = $first($p)  # Library name
+  sv = $second($p) # Source files variable name
 
-  libs{onemath}: $d/objs{$(n)_host.so.o}
-  liba{onemath}: $d/obja{$(n)_host.a.o}
-}
+  for t: $($sv)
+  {
+    n = $name($t)
+    d = $directory($t)
 
-for t: $blas_mklcpu_src
-{
-  n = $name($t)
-  d = $directory($t)
-
-  libs{onemath_blas_mklcpu}: $d/objs{$(n)_host.so.o}
-  liba{onemath_blas_mklcpu}: $d/obja{$(n)_host.a.o}
-}
-
-for t: $lapack_mklcpu_src
-{
-  n = $name($t)
-  d = $directory($t)
-
-  libs{onemath_lapack_mklcpu}: $d/objs{$(n)_host.so.o}
-  liba{onemath_lapack_mklcpu}: $d/obja{$(n)_host.a.o}
+    libs{$ln}: $d/objs{$(n)_host.so.o}
+    liba{$ln}: $d/obja{$(n)_host.a.o}
+  }
 }
 
 # Build options.
@@ -197,50 +208,36 @@ cxx.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src"       \
 #
 cxx.poptions += "-I$src_pfx_src/include/"
 
-# @@ TODO Probably necessary all backends.
-#
-blas/backends/
-{
-  cxx.poptions += $backend_poptions
-}
-
-lapack/backends/
-{
-  cxx.poptions += $backend_poptions
-}
-
 if ($cxx.target.class == 'windows')
   objs{*}: cxx.poptions += -Donemath_EXPORTS
 
-dft/backends/
+blas/backends/{objs obja}{*}    \
+lapack/backends/{objs obja}{*}  \
+dft/backends/{objs obja}{*}     \
+rng/backends/{objs obja}{*}: cxx.poptions += $backend_poptions
+
+if ($cxx.class == 'gcc')
 {
-  if ($cxx.class == 'gcc')
-  {
-    # From upstream/cmake/WarningsUtils.cmake.
-    #
-    {objs obja}{*}: cxx.coptions += -Wall -Wextra -Wshadow -Wconversion -Wpedantic
-  }
+  # From upstream/cmake/WarningsUtils.cmake.
+  #
+  dft/backends/{objs obja}{*}: cxx.coptions += -Wall -Wextra    \
+                                               -Wshadow -Wconversion -Wpedantic
 }
 
-sycl_lib_src = $onemath_src $blas_mklcpu_src $lapack_mklcpu_src
+sycl_lib_src = $onemath_src             \
+               $blas_mklcpu_src         \
+               $lapack_mklcpu_src       \
+               $dft_mklcpu_src          \
+               $rng_mklcpu_src
 import [once] buildfile{sycl_compilation}
 
 # Libraries
 
-lib{onemath}: $common_libs
-{
-  cxx.libs += $common_sys_libs
-}
-
-lib{onemath_blas_mklcpu}: $common_libs $backend_libs
-{
-  cxx.libs += $common_sys_libs $backend_sys_libs
-}
-
+lib{onemath}:               $common_libs
+lib{onemath_blas_mklcpu}:   $common_libs $backend_libs $mkl_sycl_blas
 lib{onemath_lapack_mklcpu}: $common_libs $backend_libs $mkl_sycl_lapack
-{
-  cxx.libs += $common_sys_libs $backend_sys_libs
-}
+lib{onemath_dft_mklcpu}:    $common_libs $backend_libs $mkl_sycl_dft
+lib{onemath_rng_mklcpu}:    $common_libs $backend_libs $mkl_sycl_rng
 
 # Export options.
 #
@@ -253,17 +250,10 @@ lib{onemath}:
   cxx.export.libs     = $libonemath_export_libs
 }
 
-lib{onemath_blas_mklcpu}:
-{
-  cxx.export.poptions = $incdirs
-  cxx.export.libs     =
-}
-
-lib{onemath_lapack_mklcpu}:
-{
-  cxx.export.poptions = $incdirs
-  cxx.export.libs     = $common_libs $backend_libs
-}
+lib{onemath_blas_mklcpu}: cxx.export.poptions = $incdirs
+lib{onemath_lapack_mklcpu}: cxx.export.poptions = $incdirs
+lib{onemath_dft_mklcpu}: cxx.export.poptions = $incdirs
+lib{onemath_rng_mklcpu}: cxx.export.poptions = $incdirs
 
 # For pre-releases use the complete version to make sure they cannot
 # be used in place of another pre-release or the final version. See
